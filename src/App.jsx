@@ -1,39 +1,48 @@
 import React, { useState } from 'react';
 import HomePage from './HomePage';
 import InterviewPage from './InterviewPage';
+import InterviewRoom from './InterviewRoom';
+import AnalyticsReport from './AnalyticsReport';
+import ChatBot from './ChatBot';
+import './App.css';
+import './HomePage.css';
+import './InterviewPage.css';
+import './ChatBot.css';
+import './components/components.css';
+
+// Page IDs
+// 'home' | 'interview' | 'room' | 'report'
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('home');
+  const [page, setPage] = useState('home');
+  const [reportSession, setReportSession] = useState(null);
+
+  const goHome    = () => setPage('home');
+  const goReport  = (session) => { setReportSession(session); setPage('report'); };
 
   return (
-    <div className="App">
-      {currentPage === 'home' ? (
-        <HomePage onStartInterview={() => setCurrentPage('interview')} />
-      ) : (
-        <>
-          <div style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 1000 }}>
-            <button
-              onClick={() => setCurrentPage('home')}
-              style={{
-                background: 'white',
-                color: '#667eea',
-                border: '2px solid #667eea',
-                padding: '0.6rem 1.2rem',
-                borderRadius: '20px',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                fontWeight: '600',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => e.target.style.background = '#667eea10'}
-              onMouseLeave={(e) => e.target.style.background = 'white'}
-            >
-              ← Home
-            </button>
-          </div>
-          <InterviewPage />
-        </>
+    <div id="app-root">
+      {page === 'home' && (
+        <HomePage
+          onStartInterview={() => setPage('interview')}
+          onOpenRoom={() => setPage('room')}
+        />
       )}
+
+      {page === 'interview' && (
+        <InterviewPage onGoHome={goHome} />
+      )}
+
+      {page === 'room' && (
+        <InterviewRoom onGoHome={goHome} />
+      )}
+
+      {page === 'report' && (
+        <AnalyticsReport session={reportSession} onBack={goHome} />
+      )}
+
+      {/* CS chatbot — always visible on home + interview pages */}
+      {(page === 'home' || page === 'interview') && <ChatBot />}
     </div>
   );
 }
