@@ -307,6 +307,57 @@ export const questions = {
 
   os: [
     {
+      id: 'os-mcq-1',
+      questionType: 'mcq',
+      question: 'Which of the following scheduling algorithms can suffer from starvation?',
+      difficulty: 'Easy',
+      tags: ['scheduling', 'os'],
+      timeLimit: 60,
+      options: [
+        { text: 'First-Come, First-Served (FCFS)' },
+        { text: 'Round Robin' },
+        { text: 'Shortest Job First (SJF)' },
+        { text: 'All of the above' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'SJF can cause starvation for longer jobs if shorter jobs keep arriving.',
+      expectedPoints: []
+    },
+    {
+      id: 'os-mcq-2',
+      questionType: 'mcq',
+      question: 'What is a thrashing in an operating system?',
+      difficulty: 'Medium',
+      tags: ['memory', 'paging', 'os'],
+      timeLimit: 60,
+      options: [
+        { text: 'When the CPU is completely idle' },
+        { text: 'When the system spends more time paging than executing processes' },
+        { text: 'A type of deadlock' },
+        { text: 'When a process terminates unexpectedly' }
+      ],
+      correctOptionIndex: 1,
+      explanation: 'Thrashing occurs when too much memory is committed, causing constant page faults and swapping.',
+      expectedPoints: []
+    },
+    {
+      id: 'os-mcq-3',
+      questionType: 'mcq',
+      question: 'Which of the following is NOT a necessary condition for deadlock?',
+      difficulty: 'Easy',
+      tags: ['deadlock', 'os'],
+      timeLimit: 60,
+      options: [
+        { text: 'Mutual Exclusion' },
+        { text: 'Hold and Wait' },
+        { text: 'Preemption' },
+        { text: 'Circular Wait' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'No preemption is a condition for deadlock; preemption prevents deadlock.',
+      expectedPoints: []
+    },
+    {
       id: 'os-1',
       question: 'What is the difference between a Process and a Thread?',
       difficulty: 'Easy',
@@ -442,6 +493,57 @@ export const questions = {
   ],
 
   dbms: [
+    {
+      id: 'dbms-mcq-1',
+      questionType: 'mcq',
+      question: 'Which normal form is concerned with eliminating transitive dependencies?',
+      difficulty: 'Medium',
+      tags: ['normalization', 'dbms'],
+      timeLimit: 60,
+      options: [
+        { text: 'First Normal Form (1NF)' },
+        { text: 'Second Normal Form (2NF)' },
+        { text: 'Third Normal Form (3NF)' },
+        { text: 'Boyce-Codd Normal Form (BCNF)' }
+      ],
+      correctOptionIndex: 2,
+      explanation: '3NF requires that all attributes are functionally dependent only on the primary key, eliminating transitive dependencies.',
+      expectedPoints: []
+    },
+    {
+      id: 'dbms-mcq-2',
+      questionType: 'mcq',
+      question: 'What does the ACID property \'Isolation\' ensure?',
+      difficulty: 'Easy',
+      tags: ['acid', 'transactions'],
+      timeLimit: 60,
+      options: [
+        { text: 'Data remains consistent after a transaction' },
+        { text: 'Transactions are permanent once committed' },
+        { text: 'Transactions execute independently without interfering with each other' },
+        { text: 'A transaction is treated as a single, indivisible unit' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'Isolation ensures concurrent transactions do not interfere with each other\'s intermediate states.',
+      expectedPoints: []
+    },
+    {
+      id: 'dbms-mcq-3',
+      questionType: 'mcq',
+      question: 'Which index type is best suited for exact-match lookups?',
+      difficulty: 'Medium',
+      tags: ['indexing', 'dbms'],
+      timeLimit: 60,
+      options: [
+        { text: 'B-Tree Index' },
+        { text: 'Hash Index' },
+        { text: 'Bitmap Index' },
+        { text: 'Clustered Index' }
+      ],
+      correctOptionIndex: 1,
+      explanation: 'Hash indexes provide O(1) time complexity for exact matches, though they do not support range queries.',
+      expectedPoints: []
+    },
     {
       id: 'dbms-1',
       question: 'What is the difference between SQL and NoSQL databases? When would you choose one over the other?',
@@ -582,6 +684,40 @@ export const questions = {
   ],
 
   cn: [
+    {
+      id: 'cn-mcq-1',
+      questionType: 'mcq',
+      question: 'Which OSI layer is responsible for routing packets across networks?',
+      difficulty: 'Easy',
+      tags: ['osi-model', 'routing', 'cn'],
+      timeLimit: 60,
+      options: [
+        { text: 'Data Link Layer' },
+        { text: 'Network Layer' },
+        { text: 'Transport Layer' },
+        { text: 'Application Layer' }
+      ],
+      correctOptionIndex: 1,
+      explanation: 'The Network layer (Layer 3) handles IP addressing and routing packets between distinct networks.',
+      expectedPoints: []
+    },
+    {
+      id: 'cn-mcq-2',
+      questionType: 'mcq',
+      question: 'What is the primary difference between TCP and UDP?',
+      difficulty: 'Easy',
+      tags: ['tcp', 'udp', 'cn'],
+      timeLimit: 60,
+      options: [
+        { text: 'UDP is connection-oriented, TCP is connectionless' },
+        { text: 'TCP is faster than UDP' },
+        { text: 'TCP provides reliable, ordered delivery, while UDP does not' },
+        { text: 'UDP operates at the Network layer' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'TCP ensures reliable delivery via acknowledgments and sequencing. UDP is "fire-and-forget", making it faster but unreliable.',
+      expectedPoints: []
+    },
     {
       id: 'cn-1',
       question: 'Explain the OSI model. What are the 7 layers and their functions?',
@@ -726,6 +862,40 @@ export const questions = {
 
   oop: [
     {
+      id: 'oop-mcq-1',
+      questionType: 'mcq',
+      question: 'Which principle of OOP allows an object to take on many forms?',
+      difficulty: 'Easy',
+      tags: ['polymorphism', 'oop'],
+      timeLimit: 60,
+      options: [
+        { text: 'Encapsulation' },
+        { text: 'Inheritance' },
+        { text: 'Polymorphism' },
+        { text: 'Abstraction' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'Polymorphism allows methods to do different things based on the object it is acting upon (e.g., method overriding).',
+      expectedPoints: []
+    },
+    {
+      id: 'oop-mcq-2',
+      questionType: 'mcq',
+      question: 'What is the purpose of Encapsulation?',
+      difficulty: 'Medium',
+      tags: ['encapsulation', 'oop'],
+      timeLimit: 60,
+      options: [
+        { text: 'To reuse code across multiple classes' },
+        { text: 'To restrict direct access to some of an object\'s components' },
+        { text: 'To define interfaces that must be implemented' },
+        { text: 'To allow multiple inheritance' }
+      ],
+      correctOptionIndex: 1,
+      explanation: 'Encapsulation bundles data and methods that operate on that data within one unit, and hides internal state from the outside.',
+      expectedPoints: []
+    },
+    {
       id: 'oop-1',
       question: 'What are the four pillars of OOP? Briefly explain each.',
       difficulty: 'Easy',
@@ -859,6 +1029,40 @@ export const questions = {
   ],
 
   systemdesign: [
+    {
+      id: 'sys-mcq-1',
+      questionType: 'mcq',
+      question: 'What is the primary benefit of consistent hashing in distributed systems?',
+      difficulty: 'Medium',
+      tags: ['hashing', 'distributed-systems', 'system-design'],
+      timeLimit: 60,
+      options: [
+        { text: 'It encrypts data symmetrically across servers' },
+        { text: 'It minimizes key redistribution when servers are added or removed' },
+        { text: 'It guarantees ACID compliance in NoSQL databases' },
+        { text: 'It balances load perfectly across all servers at all times' }
+      ],
+      correctOptionIndex: 1,
+      explanation: 'Consistent hashing ensures that only a small fraction of keys (K/N) need to be remapped when a node is added or removed.',
+      expectedPoints: []
+    },
+    {
+      id: 'sys-mcq-2',
+      questionType: 'mcq',
+      question: 'In the CAP Theorem, what does \'A\' stand for?',
+      difficulty: 'Easy',
+      tags: ['cap-theorem', 'system-design'],
+      timeLimit: 60,
+      options: [
+        { text: 'Atomicity' },
+        { text: 'Asynchrony' },
+        { text: 'Availability' },
+        { text: 'Accuracy' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'CAP stands for Consistency, Availability, and Partition Tolerance.',
+      expectedPoints: []
+    },
     {
       id: 'sd-1',
       question: 'What is the difference between horizontal and vertical scaling?',
@@ -1001,6 +1205,40 @@ export const questions = {
   ],
 
   webdev: [
+    {
+      id: 'web-mcq-1',
+      questionType: 'mcq',
+      question: 'Which HTTP method is conventionally used to partially update a resource?',
+      difficulty: 'Easy',
+      tags: ['http', 'api', 'webdev'],
+      timeLimit: 60,
+      options: [
+        { text: 'POST' },
+        { text: 'PUT' },
+        { text: 'PATCH' },
+        { text: 'UPDATE' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'PATCH is used to apply partial modifications to a resource, while PUT typically replaces the entire resource.',
+      expectedPoints: []
+    },
+    {
+      id: 'web-mcq-2',
+      questionType: 'mcq',
+      question: 'What is the main purpose of Cross-Origin Resource Sharing (CORS)?',
+      difficulty: 'Medium',
+      tags: ['cors', 'security', 'webdev'],
+      timeLimit: 60,
+      options: [
+        { text: 'To encrypt data transmitted between browser and server' },
+        { text: 'To prevent Cross-Site Scripting (XSS) attacks' },
+        { text: 'To allow restricted resources on a web page to be requested from another domain' },
+        { text: 'To prevent SQL injection on web forms' }
+      ],
+      correctOptionIndex: 2,
+      explanation: 'CORS is a mechanism that uses HTTP headers to tell browsers to give a web application running at one origin access to selected resources from a different origin.',
+      expectedPoints: []
+    },
     {
       id: 'web-1',
       question: 'What happens when you type a URL in the browser and press Enter? Walk through the entire process.',
@@ -1289,6 +1527,104 @@ export const questions = {
     },
   ],
 };
+
+// ════════════════════════════════════════════════════════════
+//  PROCEDURAL GENERATION ENGINE (8,000+ Qs)
+// ════════════════════════════════════════════════════════════
+
+const CONCEPTS = {
+  dsa: ['Hash Maps', 'Binary Trees', 'Heaps', 'Tries', 'Dynamic Programming', 'Sliding Window', 'Graph Traversal', 'Dijkstra', 'Sorting', 'Linked Lists', 'Two Pointers', 'Backtracking', 'Union-Find', 'Topological Sort', 'Greedy Algorithms', 'Bit Manipulation', 'Monotonic Stack', 'Prefix Sum', 'Segment Trees', 'KMP Algorithm', 'B-Trees', 'Red-Black Trees'],
+  os: ['Mutexes', 'Semaphores', 'Deadlocks', 'Paging', 'Virtual Memory', 'Thrashing', 'Context Switching', 'Process Control Blocks', 'Threads vs Processes', 'Round Robin', 'Priority Scheduling', 'Inter-Process Communication', 'Interrupt Handling', 'System Calls', 'Kernel Space', 'Page Faults', 'TLB', 'Cache Coherence', 'Fork()', 'Beladys Anomaly', 'Swapping'],
+  dbms: ['ACID Properties', 'Normalization', 'Indexing', 'B+ Trees', 'Transactions', 'Isolation Levels', 'Joins', 'NoSQL vs SQL', 'Sharding', 'Replication', 'CAP Theorem', 'Query Optimization', 'Foreign Keys', 'Triggers', 'Stored Procedures', 'Write-Ahead Logging', 'BASE Properties', 'Clustered Indexes', 'Deadlocks', 'Query Execution Plans', 'Horizontal Scaling'],
+  cn: ['TCP vs UDP', 'OSI Model', 'DNS', 'HTTP/HTTPS', 'WebSockets', 'Subnetting', 'BGP', 'OSPF', 'MAC Addresses', 'Router vs Switch', 'Congestion Control', 'Three-way Handshake', 'TLS/SSL', 'IPv4 vs IPv6', 'NAT', 'ARP', 'Flow Control', 'Packets vs Frames', 'Anycast', 'DHCP', 'Load Balancing'],
+  oop: ['Polymorphism', 'Inheritance', 'Encapsulation', 'Abstraction', 'SOLID Principles', 'Design Patterns', 'Virtual Functions', 'Interfaces', 'Abstract Classes', 'Method Overloading', 'Method Overriding', 'Constructors', 'Destructors', 'Multiple Inheritance', 'Dependency Injection', 'Singleton Pattern', 'Factory Pattern', 'Observer Pattern', 'Composition vs Inheritance', 'Static Typing', 'Object Marshalling'],
+  systemdesign: ['Microservices', 'Load Balancers', 'API Gateways', 'Rate Limiting', 'Caching Systems', 'Message Queues', 'Event-Driven Architecture', 'Kafka', 'Redis', 'CDN', 'Data Partitioning', 'Consistent Hashing', 'SAGA Pattern', 'Circuit Breakers', 'Service Discovery', 'Reverse Proxies', 'WebRTC', 'Long Polling', 'Horizontal Scaling', 'Event Sourcing', 'CQRS'],
+  webdev: ['React Lifecycle', 'Virtual DOM', 'State Management', 'CORS', 'XSS', 'CSRF', 'JWT Authentication', 'REST APIs', 'GraphQL', 'Service Workers', 'Local Storage', 'Session Storage', 'WebAssembly', 'CSS Grid', 'Flexbox', 'Responsive Design', 'SSR vs CSR', 'Webpack', 'Babel', 'Debouncing', 'Throttling', 'WebSockets'],
+  corecs: ['Turing Machines', 'NP-Completeness', 'Regular Expressions', 'Context-Free Grammars', 'Halting Problem', 'Boolean Algebra', 'Floating Point Arithmetic', 'Instruction Set Architectures', 'Pipelining', 'Von Neumann Architecture', 'RISC vs CISC', 'Cache Mapping', 'Compiler Phases', 'Lexical Analysis', 'Finite Automata', 'Assembly Language', 'Concurrency', 'Parallelism', 'Distributed Systems', 'Cryptography', 'Hashing Functions']
+};
+
+const TEMPLATES = [
+  { temp: "Explain the underlying mechanics of [C]. How does it behave at scale?", diff: "Medium" },
+  { temp: "What are the common pitfalls when implementing [C]? How do you mitigate them?", diff: "Hard" },
+  { temp: "Compare and contrast the standard implementation of [C] with its modern alternatives.", diff: "Medium" },
+  { temp: "How would you optimize [C] for a highly concurrent, multi-threaded environment?", diff: "Hard" },
+  { temp: "Describe a scenario where using [C] is explicitly an anti-pattern.", diff: "Hard" },
+  { temp: "Walk me through the conceptual steps required to build a minimal version of [C] from scratch.", diff: "Hard" },
+  { temp: "What is the worst-case performance complexity of [C], and what triggers it?", diff: "Medium" },
+  { temp: "How does [C] handle sudden network partitions or memory exhaustion?", diff: "Hard" },
+  { temp: "If you had to teach [C] to a junior developer, how would you explain it in 3 sentences?", diff: "Easy" },
+  { temp: "In what architectural layers does [C] typically reside, and why?", diff: "Medium" },
+  { temp: "Describe the debugging process when [C] fails silently in production.", diff: "Hard" },
+  { temp: "What design trade-offs are implicitly made when you adopt [C]?", diff: "Medium" },
+  { temp: "Can you provide a real-world high-throughput system that heavily relies on [C]?", diff: "Medium" },
+  { temp: "What are the memory footprint characteristics of [C]?", diff: "Medium" },
+  { temp: "Explain how [C] interacts with the underlying hardware/OS primitives.", diff: "Hard" },
+  { temp: "What is [C], and why is it considered fundamental in modern software engineering?", diff: "Easy" },
+  { temp: "How do you test implementations of [C] ensuring 100% edge-case coverage?", diff: "Hard" },
+  { temp: "What historical engineering problems led to the creation of [C]?", diff: "Easy" },
+  { temp: "Explain the difference between stateful and stateless approaches to [C].", diff: "Medium" },
+  { temp: "If [C] was completely removed from our tech stack, what would we have to build to replace it?", diff: "Hard" },
+  { temp: "How does [C] affect the overall latency metrics of an application lifecycle?", diff: "Medium" },
+  { temp: "What structural constraints limit the scalability of [C]?", diff: "Medium" },
+  { temp: "Describe a distributed tracing strategy for monitoring the health of [C].", diff: "Hard" },
+  { temp: "How has the evolution of cloud computing shifted our approach to [C]?", diff: "Medium" },
+  { temp: "Explain the security implications and attack vectors related to [C].", diff: "Hard" },
+  { temp: "Walk me through the ideal memory allocation strategy for [C].", diff: "Medium" },
+  { temp: "How does [C] gracefully degrade under extreme CPU loads?", diff: "Hard" },
+  { temp: "What telemetry and logging metrics are vital when deploying [C]?", diff: "Medium" },
+  { temp: "What is the theoretical lower bound for the execution time of [C]?", diff: "Hard" },
+  { temp: "If memory leaks occur in a system using [C], where is the most likely source?", diff: "Hard" },
+  { temp: "Write a high-level pseudocode architecture for integrating [C] securely.", diff: "Medium" },
+  { temp: "Explain [C] as if I were a Product Manager without a technical degree.", diff: "Easy" },
+  { temp: "How do garbage collection algorithms interact with [C]?", diff: "Hard" },
+  { temp: "What impact does microservice isolation have on the performance of [C]?", diff: "Medium" },
+  { temp: "Why do monolithic architectures handle [C] differently than distributed ones?", diff: "Medium" },
+  { temp: "Detail the exact sequence of initialization when booting a system utilizing [C].", diff: "Hard" },
+  { temp: "Is [C] theoretically proven to be optimal, or is it merely heuristic?", diff: "Hard" },
+  { temp: "Describe the backward compatibility challenges of upgrading [C] in production.", diff: "Medium" },
+  { temp: "How does [C] prevent thread starvation and race conditions during high contention?", diff: "Hard" },
+  { temp: "In mathematical terms, formulate the space-time equivalence of [C].", diff: "Hard" },
+  { temp: "What hardware acceleration techniques can be applied to supercharge [C]?", diff: "Hard" },
+  { temp: "If an interviewer asks you to critique [C], what negative aspects would you highlight?", diff: "Medium" },
+  { temp: "How do functional programming paradigms model [C] compared to OOP?", diff: "Hard" },
+  { temp: "If a system crash corrupts the state of [C], how do you design a recovery mechanic?", diff: "Hard" },
+  { temp: "What exactly happens in the kernel when [C] executes?", diff: "Hard" },
+  { temp: "Why did early computing pioneers invent [C] instead of relying on alternative logic?", diff: "Easy" },
+  { temp: "What happens when you decouple [C] using an asynchronous broker?", diff: "Medium" },
+  { temp: "Describe the process of sharding or partitioning systems that rely on [C].", diff: "Hard" },
+  { temp: "How do you achieve idempotency when working with [C]?", diff: "Medium" },
+  { temp: "Outline the mathematical proof that guarantees [C] behaves deterministically.", diff: "Hard" }
+];
+
+// Generate exactly 1000 questions per category (20 concepts * 50 templates = 1000)
+Object.keys(CONCEPTS).forEach(domain => {
+  if (!questions[domain]) questions[domain] = [];
+  let counter = 100;
+  
+  CONCEPTS[domain].forEach(concept => {
+    TEMPLATES.forEach(templateObj => {
+      const qText = templateObj.temp.replace("[C]", concept);
+      questions[domain].push({
+        id: `${domain}-procedural-${counter++}`,
+        questionType: 'voice',
+        question: qText,
+        difficulty: templateObj.diff,
+        tags: ['procedural', 'cs-theory', concept.toLowerCase().replace(/\s+/g, '-')],
+        timeLimit: templateObj.diff === 'Hard' ? 300 : (templateObj.diff === 'Medium' ? 180 : 120),
+        expectedPoints: [
+          `Candidate should define ${concept} clearly.`,
+          `Candidate must address the specific nuance of the question regarding ${concept}.`,
+          `Explanation should reflect ${templateObj.diff} level complexity.`,
+          `Bonus points for real-world application examples.`
+        ]
+      });
+    });
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+//  Utility Accessors
+// ════════════════════════════════════════════════════════════
 
 export function getQuestionsByCategory(categoryId, difficulty = null) {
   const cats = questions[categoryId] || [];

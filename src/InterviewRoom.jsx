@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import MCQQuestion from './components/MCQQuestion';
 import CodeEditor from './components/CodeEditor';
 import ProctoringMonitor from './components/ProctoringMonitor';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
+import './components/AnalyticsDashboard.css';
 import { CATEGORIES, questions } from './data/questions';
+import { generateQuestions, isOllamaOnline } from './services/ollamaService';
 
 // ── Icons ───────────────────────────────────────────────────
 const Ic = ({ d, size = 16, sw = 2 }) => (
@@ -23,25 +26,33 @@ const AlertIcon = () => <Ic size={20} d={<><circle cx="12" cy="12" r="10"/><line
 // Delete SAMPLE_POOL, we use questions from data/questions.js now
 
 // ── Timer Hook ────────────────────────────────────────────────
-function useCountdown(totalSeconds, onExpire) {
+function useCountdown(totalSeconds, onExpire, resetKey = 0) {
   const [seconds, setSeconds] = useState(totalSeconds);
   const ref = useRef(null);
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
   useEffect(() => {
+    clearInterval(ref.current);
     setSeconds(totalSeconds);
     ref.current = setInterval(() => {
       setSeconds(s => {
-        if (s <= 1) { clearInterval(ref.current); onExpire?.(); return 0; }
+        if (s <= 1) { clearInterval(ref.current); onExpireRef.current?.(); return 0; }
         return s - 1;
       });
     }, 1000);
     return () => clearInterval(ref.current);
-  }, [totalSeconds]);
+  }, [totalSeconds, resetKey]);
   const m = Math.floor(seconds / 60);
   const s = String(seconds % 60).padStart(2, '0');
   const pct = Math.round((seconds / totalSeconds) * 100);
   const color = pct > 50 ? 'var(--success)' : pct > 20 ? 'var(--warning)' : 'var(--error)';
   return { fmt: `${m}:${s}`, pct, color, seconds };
 }
+
+// ════════════════════════════════════════════════════════════
+//  ACTIVE ROOMS MEMORY STORE
+// ════════════════════════════════════════════════════════════
+const ACTIVE_ROOMS = {};
 
 // ════════════════════════════════════════════════════════════
 //  CREATE ROOM (Interviewer)
@@ -54,15 +65,37 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
   const [creating, setCreating] = useState(false);
 
   const [selectedCat, setSelectedCat] = useState('dsa');
+  const [questionTypeFilter, setQuestionTypeFilter] = useState('all');
   const [lcPool, setLcPool] = useState([]);
   const [fetchingLc, setFetchingLc] = useState(false);
 
   const [lcSearchQuery, setLcSearchQuery] = useState('');
 
+  // AI question generation state
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiQuestions, setAiQuestions] = useState([]);
+  const [aiError, setAiError] = useState('');
+
+  // Generate questions with Ollama AI
+  const handleAIGenerate = async () => {
+    if (selectedCat === 'leetcode-live') return;
+    setAiGenerating(true);
+    setAiError('');
+    try {
+      const online = await isOllamaOnline();
+      if (!online) throw new Error('Ollama is not running. Start it with: ollama serve');
+      const newQs = await generateQuestions(selectedCat, 10, null, questionTypeFilter);
+      setAiQuestions(prev => [...prev, ...newQs]);
+    } catch (err) {
+      setAiError(err.message || 'Failed to generate questions');
+    }
+    setAiGenerating(false);
+  };
+
   useEffect(() => {
     if (selectedCat === 'leetcode-live' && lcPool.length === 0) {
       setFetchingLc(true);
-      fetch('https://alfa-leetcode-api.onrender.com/problems?limit=3500')
+      fetch('https://alfa-leetcode-api.onrender.com/problems?limit=4000')
         .then(res => res.json())
         .then(data => {
           if (data && data.problemsetQuestionList) {
@@ -75,6 +108,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
 
                 return {
                   id: `lc-live-${q.questionFrontendId || idx}`,
+                  titleSlug: q.titleSlug,
                   questionType: 'coding',
                   question: q.title,
                   difficulty: q.difficulty,
@@ -84,9 +118,9 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
                   problemStatement: `Implement the solution for: **${q.title}**\n\n*(Full description is usually available on LeetCode. Please instruct the candidate on exact constraints).*`,
                   starterCode: {
                     javascript: `function ${camelCase}() {\n  // Your code here\n}`,
-                    python: `def ${snakeCase}():\n  pass`,
-                    java: `class Solution {\n  public void ${camelCase}() {\n  }\n}`,
-                    cpp: `class Solution {\npublic:\n  void ${camelCase}() {\n  }\n};`
+                    python: `import math\nimport collections\n\ndef ${snakeCase}():\n  pass`,
+                    java: `import java.util.*;\n\nclass Solution {\n  public void ${camelCase}() {\n  }\n}`,
+                    cpp: `#include <bits/stdc++.h>\nusing namespace std;\n\nclass Solution {\npublic:\n  void ${camelCase}() {\n  }\n};`
                   }
                 };
               });
@@ -99,11 +133,23 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
   }, [selectedCat, lcPool.length]);
 
   const availableQs = selectedCat === 'leetcode-live' 
-    ? (lcSearchQuery ? lcPool.filter(q => q.question.toLowerCase().includes(lcSearchQuery.toLowerCase())) : lcPool).slice(0, 50) 
-    : (selectedCat && questions[selectedCat] ? questions[selectedCat] : []);
+    ? (lcSearchQuery ? lcPool.filter(q => q.question.toLowerCase().includes(lcSearchQuery.toLowerCase())) : lcPool)
+    : [
+        ...(selectedCat && questions[selectedCat] ? questions[selectedCat] : []),
+        ...aiQuestions.filter(q => q.tags?.includes('ai-generated') || q._aiGenerated)
+      ];
 
-  const toggle = (q) =>
-    setSelectedQs(prev => prev.find(x => x.id === q.id) ? prev.filter(x => x.id !== q.id) : [...prev, q]);
+  const filteredQs = availableQs.filter(q => {
+    if (questionTypeFilter === 'all') return true;
+    const type = q.questionType || 'text';
+    return type === questionTypeFilter;
+  });
+
+  const toggle = (q) => {
+    // Tag question with its source domain category
+    const taggedQ = { ...q, _domain: selectedCat };
+    setSelectedQs(prev => prev.find(x => x.id === q.id) ? prev.filter(x => x.id !== q.id) : [...prev, taggedQ]);
+  };
 
   const handleCreate = () => {
     if (!selectedQs.length) return;
@@ -116,12 +162,27 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
         candidateEmail,
         settings: { timeLimitMinutes, proctoring: { tabSwitchLimit, blockOnTabSwitch: true, requireInterviewerRevive: true } },
         assignedQuestions: selectedQs.map((q, i) => ({ ...q, orderIndex: i })),
+        // Group questions by domain for multi-domain flow
+        domainGroups: (() => {
+          const groups = {};
+          selectedQs.forEach(q => {
+            const dom = q._domain || 'dsa';
+            if (!groups[dom]) groups[dom] = [];
+            groups[dom].push(q);
+          });
+          return Object.entries(groups).map(([domain, qs]) => ({
+            domain,
+            questions: qs,
+            timeMinutes: Math.max(5, Math.round(timeLimitMinutes / Object.keys(groups).length))
+          }));
+        })(),
         status: 'waiting',
         violations: [],
         suspension: { isSuspended: false },
         scores: { overall: 0, mcq: 0, coding: 0, text: 0 },
         candidateAnswers: [],
       };
+      ACTIVE_ROOMS[code] = room;
       setCreating(false);
       onRoomCreated(room);
     }, 800);
@@ -179,20 +240,67 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
               {creating ? 'Creating…' : <><CheckIcon /> Create Room ({selectedQs.length} question{selectedQs.length !== 1 ? 's' : ''})</>}
             </button>
           </div>
+
+          {/* Selected Questions by Domain Summary */}
+          {selectedQs.length > 0 && (() => {
+            const groups = {};
+            selectedQs.forEach(q => {
+              const dom = q._domain || 'dsa';
+              if (!groups[dom]) groups[dom] = [];
+              groups[dom].push(q);
+            });
+            const domainEntries = Object.entries(groups);
+            return (
+              <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-primary)', paddingTop: '1rem' }}>
+                <div className="room-section-label" style={{ marginBottom: '0.75rem' }}>
+                  📋 Selected Questions ({domainEntries.length} domain{domainEntries.length > 1 ? 's' : ''})
+                </div>
+                {domainEntries.map(([dom, qs]) => (
+                  <div key={dom} style={{ padding: '10px 12px', marginBottom: '0.5rem', background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <strong style={{ fontSize: '0.82rem', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {CATEGORIES.find(c => c.id === dom)?.label || dom}
+                      </strong>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{qs.length} question{qs.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {qs.map((q, i) => (
+                      <div key={i} style={{ fontSize: '0.78rem', color: 'var(--text-dim)', padding: '3px 0', display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>•</span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.text || q.question}</span>
+                        <button onClick={() => setSelectedQs(prev => prev.filter(x => x.id !== q.id))}
+                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', padding: '0 4px' }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '0.5rem', padding: '8px 12px', background: 'rgba(99,102,241,0.08)', borderRadius: 8 }}>
+                  💡 Time will be split equally across {domainEntries.length} domain{domainEntries.length > 1 ? 's' : ''}: ~{Math.round(timeLimitMinutes / domainEntries.length)} min each
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Question Picker */}
         <div className="room-create-col">
           <div className="room-section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>Assign Questions</span>
+            <span>Browse & Add Questions</span>
             <span className="room-section-count">{selectedQs.length} selected</span>
           </div>
 
-          <div className="room-field" style={{ marginBottom: '1rem' }}>
-            <select className="room-select" value={selectedCat} onChange={e => { setSelectedCat(e.target.value); setLcSearchQuery(''); }}>
+          <div className="room-field" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem' }}>
+            <select className="room-select" value={selectedCat} onChange={e => { setSelectedCat(e.target.value); setLcSearchQuery(''); }} style={{ flex: 2 }}>
               {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
               <option value="leetcode-live">🌐 LeetCode Live Database (All 3,500+)</option>
             </select>
+            {selectedCat !== 'leetcode-live' && (
+              <select className="room-select" value={questionTypeFilter} onChange={e => setQuestionTypeFilter(e.target.value)} style={{ flex: 1 }}>
+                <option value="all">All Types</option>
+                <option value="mcq">MCQs Only</option>
+                <option value="text">Written Only</option>
+                <option value="coding">Coding Only</option>
+              </select>
+            )}
           </div>
 
           {selectedCat === 'leetcode-live' && !fetchingLc && (
@@ -202,10 +310,25 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
             </div>
           )}
 
+          {selectedCat !== 'leetcode-live' && (
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center' }}>
+              <button
+                id="ai-generate-btn"
+                className="ip-btn-primary room-ai-gen-btn"
+                onClick={handleAIGenerate}
+                disabled={aiGenerating}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                {aiGenerating ? 'Generating with AI…' : '⚡ Generate 10 with AI'}
+              </button>
+              {aiError && <span style={{ color: '#ef4444', fontSize: '0.8rem' }}>{aiError}</span>}
+              {aiQuestions.length > 0 && <span style={{ color: '#22c55e', fontSize: '0.8rem' }}>+{aiQuestions.length} AI questions added</span>}
+            </div>
+          )}
+
           <div className="room-q-pool">
             {fetchingLc && <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem', padding: '1rem' }}>Downloading 3,500+ LeetCode problems...</div>}
             {!fetchingLc && selectedCat === 'leetcode-live' && availableQs.length === 0 && <div style={{ padding: '1rem', color: 'var(--text-dim)' }}>No problems matched your search.</div>}
-            {!fetchingLc && availableQs.map(q => {
+            {!fetchingLc && filteredQs.map(q => {
               const isSelected = selectedQs.find(x => x.id === q.id);
               return (
                 <button key={q.id} className={`room-q-item${isSelected ? ' room-q-item--selected' : ''}`}
@@ -292,6 +415,21 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
             {room.candidateEmail && <div className="room-info-row"><span>Candidate</span><strong>{room.candidateEmail}</strong></div>}
           </div>
 
+          {/* Multi-Domain Breakdown */}
+          {room.domainGroups && room.domainGroups.length > 1 && (
+            <div className="room-info-card">
+              <div className="room-info-label">Domain Breakdown</div>
+              {room.domainGroups.map((dg, i) => (
+                <div key={i} className="room-info-row" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', padding: '6px 0' }}>
+                  <span style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.5px' }}>
+                    {CATEGORIES.find(c => c.id === dg.domain)?.label || dg.domain}
+                  </span>
+                  <strong>{dg.questions.length} Qs · {dg.timeMinutes} min</strong>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Revive Requests */}
           {reviveRequests.length > 0 && (
             <div className="room-revive-card">
@@ -332,19 +470,17 @@ const JoinRoom = ({ onJoined, onBack }) => {
     setJoining(true);
     setError('');
     setTimeout(() => {
-      // Mock: for demo, any 6-char code resolves to a sample room
-      const mockRoom = {
-        roomCode: code.toUpperCase(),
-        title: 'SDE-1 Technical Round',
-        settings: { timeLimitMinutes: 60, proctoring: { tabSwitchLimit: 1, blockOnTabSwitch: true, requireInterviewerRevive: true } },
-        assignedQuestions: [questions.dsa[0], questions.dsa[15], questions.dsa[17]],
-        status: 'active',
-        violations: [],
-        suspension: { isSuspended: false },
-        candidateAnswers: [],
-      };
+      const formattedCode = code.toUpperCase();
+      const actualRoom = ACTIVE_ROOMS[formattedCode];
+      
+      if (!actualRoom) {
+        setJoining(false);
+        setError('Invalid Room Code. Room not found.');
+        return;
+      }
+      
       setJoining(false);
-      onJoined(mockRoom);
+      onJoined(actualRoom);
     }, 900);
   };
 
@@ -386,26 +522,58 @@ const JoinRoom = ({ onJoined, onBack }) => {
 };
 
 // ════════════════════════════════════════════════════════════
-//  LIVE SESSION (Candidate answering)
+//  LIVE SESSION (Candidate answering — Domain-by-Domain Flow)
 // ════════════════════════════════════════════════════════════
 const LiveSession = ({ room, onComplete }) => {
+  const domainGroups = room.domainGroups || [{ domain: 'general', questions: room.assignedQuestions, timeMinutes: room.settings?.timeLimitMinutes || 60 }];
+  const totalDomains = domainGroups.length;
+
+  const [domainIdx, setDomainIdx] = useState(0);
   const [qIdx, setQIdx] = useState(0);
-  const [answers, setAnswers] = useState([]);
+  const [answers, setAnswers] = useState({});
   const [textAnswer, setTextAnswer] = useState('');
-  const [submitted, setSubmitted] = useState(false);
   const [isSuspended, setIsSuspended] = useState(false);
-  const [reviveRequested, setReviveRequested] = useState(false);
   const [violations, setViolations] = useState([]);
   const [warningShown, setWarningShown] = useState(false);
+  const [showDomainTransition, setShowDomainTransition] = useState(true);
+  const [timerStarted, setTimerStarted] = useState(false);
 
-  const questions = room.assignedQuestions;
-  const q = questions[qIdx];
-  const total = questions.length;
+  const currentDomain = domainGroups[domainIdx];
+  const currentQuestions = currentDomain?.questions || [];
+  const rawQ = currentQuestions[qIdx] || null;
+  const q = rawQ ? { ...rawQ, questionType: ['mcq', 'coding'].includes(rawQ.questionType) ? rawQ.questionType : 'text' } : null;
+  const totalQsInDomain = currentQuestions.length;
   const tabLimit = room.settings?.proctoring?.tabSwitchLimit || 1;
 
-  const { fmt, pct, color } = useCountdown(
-    (room.settings?.timeLimitMinutes || 60) * 60,
-    () => { /* auto-submit on timer expiry */ handleFinish(); }
+  const allQuestions = domainGroups.flatMap(dg => dg.questions);
+  const globalQIdx = domainGroups.slice(0, domainIdx).reduce((s, dg) => s + dg.questions.length, 0) + qIdx;
+  const totalQuestions = allQuestions.length;
+  const domainLabel = CATEGORIES.find(c => c.id === currentDomain?.domain)?.label || currentDomain?.domain || 'General';
+
+  // DEBUG — remove after fixing
+  console.log('[LiveSession]', { domainIdx, qIdx, totalDomains, domain: currentDomain?.domain, questionsCount: currentQuestions.length, q: q?.question || q?.text || null, submitted: !!answers[globalQIdx] });
+
+  // Derive submitted from answers — resets automatically when question changes
+  const submitted = !!answers[globalQIdx];
+
+  // Use ref for timer expire to avoid stale closure
+  const domainFinishRef = useRef(null);
+  domainFinishRef.current = () => {
+    if (domainIdx < totalDomains - 1) {
+      setDomainIdx(d => d + 1);
+      setQIdx(0);
+      setTextAnswer('');
+      setShowDomainTransition(true);
+      setTimerStarted(false);
+    } else {
+      onComplete({ room, answers: Object.values(answers), violations, totalTime: domainGroups.reduce((s, dg) => s + (dg.timeMinutes || 10) * 60, 0) });
+    }
+  };
+
+  const { fmt, color } = useCountdown(
+    timerStarted ? (currentDomain?.timeMinutes || 15) * 60 : 99999,
+    () => domainFinishRef.current?.(),
+    domainIdx * 1000 + (timerStarted ? 1 : 0)
   );
 
   const handleViolation = useCallback((type, count) => {
@@ -413,60 +581,87 @@ const LiveSession = ({ room, onComplete }) => {
     if (count < tabLimit) setWarningShown(true);
   }, [tabLimit]);
 
-  const handleSuspend = useCallback(() => {
-    setIsSuspended(true);
-    setWarningShown(false);
-  }, []);
-
-  const handleReviveRequest = () => {
-    setReviveRequested(true);
-    room.suspension = { isSuspended: true, reviveRequested: true, reviveRequestedAt: new Date() };
-  };
+  const handleSuspend = useCallback(() => { setIsSuspended(true); setWarningShown(false); }, []);
 
   const saveAnswer = (ans) => {
-    setAnswers(prev => {
-      const updated = [...prev];
-      updated[qIdx] = { ...q, ...ans, answeredAt: new Date() };
-      return updated;
-    });
-    setSubmitted(true);
+    const gIdx = domainGroups.slice(0, domainIdx).reduce((s, dg) => s + dg.questions.length, 0) + qIdx;
+    setAnswers(prev => ({ ...prev, [gIdx]: { ...q, ...ans, _domain: currentDomain.domain, answeredAt: new Date() } }));
   };
 
   const next = () => {
-    if (qIdx < total - 1) {
+    if (qIdx < totalQsInDomain - 1) {
       setQIdx(i => i + 1);
       setTextAnswer('');
-      setSubmitted(false);
     } else {
-      handleFinish();
+      // Last question in domain
+      if (domainIdx < totalDomains - 1) {
+        setDomainIdx(d => d + 1);
+        setQIdx(0);
+        setTextAnswer('');
+        setShowDomainTransition(true);
+        setTimerStarted(false);
+      } else {
+        // All done
+        setAnswers(prev => {
+          onComplete({ room, answers: Object.values(prev), violations, totalTime: domainGroups.reduce((s, dg) => s + (dg.timeMinutes || 10) * 60, 0) });
+          return prev;
+        });
+      }
     }
   };
 
-  const handleFinish = () => {
-    const finalAnswers = [...answers];
-    onComplete({ room, answers: finalAnswers, violations, totalTime: (room.settings?.timeLimitMinutes || 60) * 60 });
-  };
+  const pctBar = Math.round(((globalQIdx + (submitted ? 1 : 0)) / totalQuestions) * 100);
+  const domainPctBar = Math.round(((qIdx + (submitted ? 1 : 0)) / totalQsInDomain) * 100);
 
-  const pctBar = Math.round(((qIdx + (submitted ? 1 : 0)) / total) * 100);
+  const reviveRequested = false;
+
+  // Domain transition screen
+  if (showDomainTransition) {
+    return (
+      <div className="room-session" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+        <div style={{ textAlign: 'center', maxWidth: 500, padding: '2rem' }} className="animate-fade-in-up">
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{domainIdx === 0 ? '🚀' : '✅'}</div>
+          {domainIdx > 0 && (
+            <div style={{ color: '#22c55e', fontSize: '0.85rem', fontWeight: 600, marginBottom: '1rem', padding: '6px 16px', background: 'rgba(34,197,94,0.1)', borderRadius: 8, display: 'inline-block' }}>
+              ✓ {CATEGORIES.find(c => c.id === domainGroups[domainIdx - 1]?.domain)?.label || 'Previous'} complete!
+            </div>
+          )}
+          <h2 style={{ color: 'var(--text-primary)', fontSize: '1.5rem', margin: '0.5rem 0' }}>
+            {domainIdx === 0 ? 'Ready to Begin' : 'Next Section'}
+          </h2>
+          <div style={{ color: '#6366f1', fontWeight: 700, fontSize: '1.1rem', margin: '0.5rem 0', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            {domainLabel}
+          </div>
+          <p style={{ color: 'var(--text-dim)', fontSize: '0.9rem', margin: '1rem 0' }}>
+            {currentDomain.questions.length} questions · {currentDomain.timeMinutes} minutes
+          </p>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: '1.5rem' }}>
+            {domainGroups.map((dg, i) => (
+              <div key={i} style={{ width: 40, height: 6, borderRadius: 4, background: i < domainIdx ? '#22c55e' : i === domainIdx ? '#6366f1' : 'rgba(255,255,255,0.1)' }}
+                title={CATEGORIES.find(c => c.id === dg.domain)?.label || dg.domain} />
+            ))}
+          </div>
+          <p style={{ color: 'var(--text-dim)', fontSize: '0.78rem' }}>Section {domainIdx + 1} of {totalDomains}</p>
+          <button className="ip-btn-primary" onClick={() => { setShowDomainTransition(false); setTimerStarted(true); }} style={{ padding: '12px 32px', fontSize: '1rem', marginTop: '1rem' }}>
+            {domainIdx === 0 ? '▶ Start Interview' : '▶ Start Section'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Question body — key forces full remount on every question change
+  const questionKey = `q-${domainIdx}-${qIdx}`;
 
   return (
     <div className="room-session">
-      {/* Proctoring */}
-      <ProctoringMonitor
-        enabled={room.settings?.proctoring?.blockOnTabSwitch !== false}
-        tabSwitchLimit={tabLimit}
-        onViolation={handleViolation}
-        onSuspend={handleSuspend}
-        isSuspended={isSuspended}
-        onReviveRequest={handleReviveRequest}
-        sessionId={room.roomCode}
-      />
+      <ProctoringMonitor enabled={room.settings?.proctoring?.blockOnTabSwitch !== false} tabSwitchLimit={tabLimit}
+        onViolation={handleViolation} onSuspend={handleSuspend} isSuspended={isSuspended}
+        onReviveRequest={() => {}} sessionId={room.roomCode} />
 
-      {/* Warning toast (before hard suspend) */}
       {warningShown && (
         <div className="proctor-warning-toast" role="alert">
-          <WarnIcon />
-          Tab switch detected! Next violation will suspend this session.
+          <WarnIcon /> Tab switch detected! Next violation will suspend this session.
           <button onClick={() => setWarningShown(false)}>✕</button>
         </div>
       )}
@@ -478,11 +673,27 @@ const LiveSession = ({ room, onComplete }) => {
           <span>{room.title}</span>
           <span className="room-code-pill">{room.roomCode}</span>
         </div>
+
+        {totalDomains > 1 && (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', margin: '0 0.5rem' }}>
+            {domainGroups.map((dg, i) => (
+              <div key={i} style={{
+                padding: '4px 8px', borderRadius: 6, fontSize: '0.65rem', fontWeight: 600,
+                background: i === domainIdx ? '#6366f1' : i < domainIdx ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
+                color: i === domainIdx ? '#fff' : i < domainIdx ? '#22c55e' : 'var(--text-dim)',
+                textTransform: 'uppercase',
+              }}>
+                {i < domainIdx ? '✓' : ''}{CATEGORIES.find(c => c.id === dg.domain)?.label?.split(' ')[0]?.slice(0, 4) || dg.domain}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="room-session-progress-wrap">
           <div className="room-session-progress-bar">
             <div className="room-session-progress-fill" style={{ width: `${pctBar}%` }}></div>
           </div>
-          <span className="room-session-progress-label">Q {qIdx + 1}/{total}</span>
+          <span className="room-session-progress-label">Q {globalQIdx + 1}/{totalQuestions}</span>
         </div>
         <div className="room-session-timer" style={{ color }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -490,94 +701,119 @@ const LiveSession = ({ room, onComplete }) => {
           </svg>
           {fmt}
         </div>
-        {violations.length > 0 && (
-          <div className="room-violation-count">
-            <WarnIcon /> {violations.length} violation{violations.length !== 1 ? 's' : ''}
-          </div>
-        )}
+        {violations.length > 0 && <div className="room-violation-count"><WarnIcon /> {violations.length}</div>}
       </div>
 
-      {/* Question */}
-      <div className="room-session-body">
-        <div className="room-q-header">
-          <span className="room-q-num">Question {qIdx + 1} of {total}</span>
-          <span className={`ce-type-badge ce-type-${q.questionType}`}>
-            {{ mcq: 'Multiple Choice', coding: 'Coding', text: 'Text Answer' }[q.questionType]}
-          </span>
-          <span className={`ip-diff-badge ip-diff-badge--${q.difficulty}`}>{q.difficulty}</span>
+      {/* Domain progress bar */}
+      {totalDomains > 1 && (
+        <div style={{ padding: '0 5%', background: 'var(--bg-primary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: '0.75rem' }}>
+            <span style={{ color: '#6366f1', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{domainLabel}</span>
+            <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 4 }}>
+              <div style={{ width: `${domainPctBar}%`, height: '100%', background: '#6366f1', borderRadius: 4, transition: 'width 0.3s' }}></div>
+            </div>
+            <span style={{ color: 'var(--text-dim)' }}>{qIdx + 1}/{totalQsInDomain}</span>
+          </div>
         </div>
+      )}
 
-        {/* MCQ */}
-        {q.questionType === 'mcq' && (
-          <div className="room-q-card">
-            <h3 className="room-q-text">{q.text}</h3>
-            <MCQQuestion
-              question={q}
-              onSubmit={(idx, isCorrect, score) => saveAnswer({ selectedOption: idx, isCorrect, score, questionType: 'mcq' })}
-              readOnly={submitted}
-              submittedIndex={submitted ? (answers[qIdx]?.selectedOption ?? null) : null}
-            />
+      {/* Question — key on this div forces full remount on every question change */}
+      <div className="room-session-body" key={questionKey}>
+        {!q ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-dim)' }}>
+            <p style={{color:'#f87171',marginBottom:'0.5rem'}}>⚠ No questions found in this section.</p>
+            <pre style={{fontSize:'0.7rem',color:'#666',marginBottom:'1rem',textAlign:'left',background:'#111',padding:'0.5rem',borderRadius:6}}>
+              domain={currentDomain?.domain}, questions={currentQuestions.length}, domainIdx={domainIdx}, total={totalDomains}
+            </pre>
+            <button className="ip-btn-primary" onClick={() => domainFinishRef.current?.()} style={{ marginTop: '0.5rem' }}>
+              {domainIdx < totalDomains - 1 ? 'Skip to Next Domain →' : '✓ Finish Session'}
+            </button>
           </div>
-        )}
+        ) : (
+          <>
+            <div className="room-q-header">
+              <span className="room-q-num">Q{qIdx + 1}/{totalQsInDomain} — {domainLabel}</span>
+              <span className={`ce-type-badge ce-type-${q.questionType}`}>
+                {{ mcq: 'Multiple Choice', coding: 'Coding', text: 'Text Answer' }[q.questionType]}
+              </span>
+              <span className={`ip-diff-badge ip-diff-badge--${(q.difficulty||'').toLowerCase()}`}>{q.difficulty}</span>
+            </div>
 
-        {/* Coding */}
-        {q.questionType === 'coding' && (
-          <div className="room-q-coding">
-            <CodeEditor
-              question={q}
-              onSubmit={(result) => saveAnswer({ ...result, questionType: 'coding' })}
-              readOnly={submitted}
-            />
-          </div>
-        )}
+            {q.questionType === 'mcq' && (
+              <div className="room-q-card">
+                <h3 className="room-q-text">{q.text || q.question}</h3>
+                <MCQQuestion
+                  question={q}
+                  onSubmit={(idx, isCorrect, score) => saveAnswer({ selectedOption: idx, selectedOptionIndex: idx, isCorrect, score, questionType: 'mcq' })}
+                  readOnly={submitted}
+                  submittedIndex={submitted ? (answers[globalQIdx]?.selectedOption ?? null) : null}
+                />
+              </div>
+            )}
 
-        {/* Text */}
-        {q.questionType === 'text' && (
-          <div className="room-q-card">
-            <h3 className="room-q-text">{q.text}</h3>
-            {q.keyPoints?.length > 0 && (
-              <div className="room-q-keypoints">
-                <span className="room-q-kp-label">Key areas to cover:</span>
-                <div className="room-q-kps">
-                  {q.keyPoints.map((kp, i) => <span key={i} className="room-q-kp">{kp}</span>)}
+            {q.questionType === 'coding' && (
+              <div className="room-q-coding">
+                <CodeEditor
+                  question={q}
+                  onSubmit={(result) => saveAnswer({ ...result, questionType: 'coding' })}
+                  readOnly={submitted}
+                />
+              </div>
+            )}
+
+            {q.questionType === 'text' && (
+              <div className="room-q-card">
+                <h3 className="room-q-text">{q.text || q.question}</h3>
+                {q.keyPoints?.length > 0 && (
+                  <div className="room-q-keypoints"><span className="room-q-kp-label">Key areas to cover:</span>
+                    <div className="room-q-kps">{q.keyPoints.map((kp, i) => <span key={i} className="room-q-kp">{kp}</span>)}</div>
+                  </div>
+                )}
+                <textarea id="text-answer-input" className="ip-textarea" placeholder="Write your answer here..."
+                  value={textAnswer} onChange={e => setTextAnswer(e.target.value)} disabled={submitted} rows={8} />
+                <div className="ip-answer-footer">
+                  <span className="ip-word-count">{textAnswer.trim() ? textAnswer.trim().split(/\s+/).length : 0} words</span>
+                  {!submitted && (
+                    <button id="submit-text-btn" className="ip-btn-primary"
+                      onClick={() => saveAnswer({ textAnswer, score: Math.min(100, Math.round((textAnswer.split(' ').length / 80) * 100)), questionType: 'text' })}
+                      disabled={!textAnswer.trim()}>
+                      <CheckIcon /> Submit Answer
+                    </button>
+                  )}
                 </div>
               </div>
             )}
-            <textarea
-              id="text-answer-input"
-              className="ip-textarea"
-              placeholder="Write your answer here..."
-              value={textAnswer}
-              onChange={e => setTextAnswer(e.target.value)}
-              disabled={submitted}
-              rows={8}
-            />
-            <div className="ip-answer-footer">
-              <span className="ip-word-count">{textAnswer.trim() ? textAnswer.trim().split(/\s+/).length : 0} words</span>
-              {!submitted && (
-                <button id="submit-text-btn" className="ip-btn-primary"
-                  onClick={() => saveAnswer({ textAnswer, score: Math.min(100, Math.round((textAnswer.split(' ').length / 80) * 100)), questionType: 'text' })}
-                  disabled={!textAnswer.trim()}>
-                  <CheckIcon /> Submit Answer
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* Next / Finish */}
-        {submitted && (
-          <div className="room-q-nav">
-            <button id={qIdx < total - 1 ? 'next-question-btn' : 'finish-session-btn'}
-              className="ip-btn-primary" onClick={next}>
-              {qIdx < total - 1 ? 'Next Question →' : '✓ Finish Session'}
-            </button>
-          </div>
+            {/* Next / Finish for MCQ and Text */}
+            {submitted && q.questionType !== 'coding' && (
+              <div className="room-q-nav">
+                <button
+                  id={qIdx < totalQsInDomain - 1 ? 'next-question-btn' : domainIdx < totalDomains - 1 ? 'next-domain-btn' : 'finish-session-btn'}
+                  className="ip-btn-primary" onClick={next}>
+                  {qIdx < totalQsInDomain - 1 ? 'Next Question →' : domainIdx < totalDomains - 1 ? `✓ Finish ${domainLabel} → Next Domain` : '✓ Finish Session'}
+                </button>
+              </div>
+            )}
+
+            {/* Next / Finish floating button for Coding (always visible) */}
+            {submitted && q.questionType === 'coding' && (
+              <div style={{ position: 'fixed', bottom: '1.5rem', right: '2rem', zIndex: 1000 }}>
+                <button
+                  id={qIdx < totalQsInDomain - 1 ? 'next-question-btn' : domainIdx < totalDomains - 1 ? 'next-domain-btn' : 'finish-session-btn'}
+                  className="ip-btn-primary"
+                  onClick={next}
+                  style={{ padding: '0.75rem 1.5rem', fontSize: '0.95rem', boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}>
+                  {qIdx < totalQsInDomain - 1 ? 'Next Question →' : domainIdx < totalDomains - 1 ? `✓ Finish ${domainLabel} → Next Domain` : '✓ Finish Session'}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 };
+
 
 // ════════════════════════════════════════════════════════════
 //  InterviewRoom Page (main export)
@@ -589,7 +825,38 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
 
   const handleRoomCreated = (newRoom) => { setRoom(newRoom); setView('lobby'); };
   const handleJoined = (joinedRoom) => { setRoom(joinedRoom); setView('live'); };
-  const handleSessionComplete = (result) => { setSessionResult(result); setView('done'); };
+  const handleSessionComplete = (result) => {
+    const domainGroups = result.room?.domainGroups || [];
+    const answersArr = Array.isArray(result.answers) ? result.answers : Object.values(result.answers || {});
+    const domainResults = domainGroups.map(dg => {
+      const domainAnswers = answersArr.filter(a => a && a._domain === dg.domain);
+      const totalQuestions = dg.questions.length;
+      const correctAnswers = domainAnswers.filter(a => {
+        if (a.questionType === 'mcq') return a.isCorrect === true;
+        if (a.questionType === 'coding') return (a.score || 0) >= 70;
+        return (a.score || 0) >= 50;
+      }).length;
+      const totalScore = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+      return {
+        domain: dg.domain,
+        questions: domainAnswers.map(a => ({
+          question: a.question || a.text,
+          answer: a.textAnswer || a.code || '',
+          score: a.score || 0,
+          isCorrect: a.questionType === 'mcq' ? a.isCorrect === true : (a.score || 0) >= 50,
+          difficulty: a.difficulty || 'Medium',
+          timeSpent: 0
+        })),
+        totalScore,
+        totalQuestions,
+        correctAnswers,
+        timeTaken: (dg.timeMinutes || 10) * 60,
+        timeAllotted: (dg.timeMinutes || 10) * 60
+      };
+    });
+    setSessionResult({ ...result, domainResults });
+    setView('done');
+  };
 
   return (
     <div className="room-page">
@@ -645,14 +912,21 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
           <div className="room-done animate-fade-in-up">
             <div className="room-done-icon"><CheckIcon /></div>
             <h2 className="room-done-title">Session Complete!</h2>
-            <p className="room-done-sub">Your responses have been recorded. View your full analytics report below.</p>
+            <p className="room-done-sub">Your responses have been recorded. Full analytics report below.</p>
             {sessionResult.violations?.length > 0 && (
               <div className="room-done-violations">
                 <WarnIcon /> {sessionResult.violations.length} proctoring violation{sessionResult.violations.length !== 1 ? 's' : ''} were recorded during this session.
               </div>
             )}
+            {/* Full Analytics Dashboard */}
+            {sessionResult.domainResults && sessionResult.domainResults.length > 0 && (
+              <AnalyticsDashboard
+                domainResults={sessionResult.domainResults}
+                totalTime={sessionResult.totalTime}
+                candidateName={sessionResult.room?.candidateEmail || 'Candidate'}
+              />
+            )}
             <div className="room-done-actions">
-              <button id="view-report-btn" className="ip-btn-primary" onClick={onGoHome}>View Analytics Report</button>
               <button className="ip-btn-ghost" onClick={onGoHome}><BackIcon /> Home</button>
             </div>
           </div>

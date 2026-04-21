@@ -657,3 +657,75 @@
   align-items: center;
   margin-top: 0.75rem;
 }
+
+/* ── Verge1.o AI Analysis Panel ────────────────────────────── */
+.ce-ai-analysis {
+  margin-bottom: 1rem;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.ce-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.1));
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.ce-ai-verdict {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.ce-ai-section {
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.ce-ai-section:last-child {
+  border-bottom: none;
+}
+
+.ce-ai-section strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.ce-ai-error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.ce-ai-bugs {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.ce-ai-suggestions {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.ce-ai-btn:hover:not(:disabled) {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+}
+
+.ce-ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

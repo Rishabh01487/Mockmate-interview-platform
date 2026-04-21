@@ -26,7 +26,8 @@ const MCQQuestion = ({ question, onSubmit, readOnly = false, submittedIndex = nu
 
   const handleSubmit = () => {
     if (selected === null) return;
-    const isCorrect = question.options[selected]?.isCorrect === true;
+    const correctIdx = question.correctOptionIndex ?? question.options.findIndex(o => o.isCorrect);
+    const isCorrect = selected === correctIdx;
     const score = isCorrect ? 100 : 0;
     setSubmitted(true);
     onSubmit && onSubmit(selected, isCorrect, score);
@@ -34,7 +35,8 @@ const MCQQuestion = ({ question, onSubmit, readOnly = false, submittedIndex = nu
 
   const getOptionState = (idx) => {
     if (!submitted) return 'default';
-    const isThisCorrect = question.options[idx]?.isCorrect;
+    const correctIdx = question.correctOptionIndex ?? question.options.findIndex(o => o.isCorrect);
+    const isThisCorrect = idx === correctIdx;
     const isSelected = selected === idx;
     if (isThisCorrect) return 'correct';
     if (isSelected && !isThisCorrect) return 'wrong';
@@ -85,22 +87,26 @@ const MCQQuestion = ({ question, onSubmit, readOnly = false, submittedIndex = nu
       )}
 
       {/* Result + Explanation */}
-      {submitted && (
-        <div className={`mcq-result ${question.options[selected]?.isCorrect ? 'mcq-result--correct' : 'mcq-result--wrong'}`}>
-          <div className="mcq-result-header">
-            {question.options[selected]?.isCorrect ? (
-              <><span className="mcq-result-icon mcq-icon--correct"><CheckIcon /></span> Correct!</>
-            ) : (
-              <><span className="mcq-result-icon mcq-icon--wrong"><XIcon /></span> Incorrect</>
+      {submitted && (() => {
+        const correctIdx = question.correctOptionIndex ?? question.options.findIndex(o => o.isCorrect);
+        const isCorrect = selected === correctIdx;
+        return (
+          <div className={`mcq-result ${isCorrect ? 'mcq-result--correct' : 'mcq-result--wrong'}`}>
+            <div className="mcq-result-header">
+              {isCorrect ? (
+                <><span className="mcq-result-icon mcq-icon--correct"><CheckIcon /></span> Correct!</>
+              ) : (
+                <><span className="mcq-result-icon mcq-icon--wrong"><XIcon /></span> Incorrect — Correct answer: {question.options[correctIdx]?.text}</>
+              )}
+            </div>
+            {question.explanation && (
+              <p className="mcq-explanation">
+                <strong>Explanation:</strong> {question.explanation}
+              </p>
             )}
           </div>
-          {question.explanation && (
-            <p className="mcq-explanation">
-              <strong>Explanation:</strong> {question.explanation}
-            </p>
-          )}
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

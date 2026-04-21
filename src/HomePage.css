@@ -253,6 +253,22 @@
   letter-spacing: 0.06em;
 }
 
+/* Hero Quote */
+.hero-quote {
+  margin: 2rem 0 0;
+  padding: 0 0 0 1.25rem;
+  border-left: 3px solid rgba(99, 102, 241, 0.4);
+}
+
+.hero-quote p {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
 /* Hero Visual */
 .hero-visual {
   flex: 1;
