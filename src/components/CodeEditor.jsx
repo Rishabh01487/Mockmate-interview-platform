@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { analyzeCode, isOllamaOnline } from '../services/ollamaService';
 
 // ── Icons ─────────────────────────────────────────────────────
 const PlayIcon = () => (
@@ -17,6 +18,11 @@ const ResetIcon = () => (
 const CheckIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="20 6 9 17 4 12"/>
+  </svg>
+);
+const AIIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
   </svg>
 );
 
@@ -50,16 +56,56 @@ function runJavaScript(code, input) {
   }
 }
 
-// Mock runner for non-JS languages
-function mockRun(language, testCases) {
-  return testCases.map((tc) => ({
-    passed: Math.random() > 0.4,
-    input: tc.input,
-    expectedOutput: tc.expectedOutput,
-    actualOutput: tc.expectedOutput, // mock: pretend correct
-    executionTime: Math.floor(Math.random() * 80) + 20,
-    error: '',
-  }));
+// AI-powered code analysis for non-JS languages (replaces mock runner)
+async function aiRun(language, code, problemStatement, testCases) {
+  try {
+    const online = await isOllamaOnline();
+    if (!online) {
+      // Fallback: return placeholder results when Ollama is offline
+      return testCases.map((tc) => ({
+        passed: false,
+        input: tc.input,
+        expectedOutput: tc.expectedOutput,
+        actualOutput: '[Verge1.o Offline] Start Ollama to enable AI compilation',
+        executionTime: 0,
+        error: 'Ollama AI engine not running. Start it with: ollama serve',
+      }));
+    }
+
+    const analysis = await analyzeCode(code, language, problemStatement, testCases);
+    
+    // Map AI analysis results to the expected format
+    if (analysis.testResults && analysis.testResults.length > 0) {
+      return analysis.testResults.map((tr, i) => ({
+        passed: tr.passed,
+        input: tr.input || testCases[i]?.input || '',
+        expectedOutput: tr.expectedOutput || testCases[i]?.expectedOutput || '',
+        actualOutput: tr.actualOutput || '(AI could not determine output)',
+        executionTime: Math.floor(Math.random() * 50) + 10,
+        error: tr.passed ? '' : (tr.explanation || ''),
+      }));
+    }
+
+    // If AI returned no test results, use overall verdict
+    return testCases.map((tc) => ({
+      passed: analysis.overallVerdict === 'accepted',
+      input: tc.input,
+      expectedOutput: tc.expectedOutput,
+      actualOutput: analysis.overallVerdict === 'accepted' ? tc.expectedOutput : '[AI] Logic error detected',
+      executionTime: Math.floor(Math.random() * 50) + 10,
+      error: analysis.bugs?.join('; ') || '',
+    }));
+  } catch (err) {
+    console.error('AI analysis failed:', err);
+    return testCases.map((tc) => ({
+      passed: false,
+      input: tc.input,
+      expectedOutput: tc.expectedOutput,
+      actualOutput: `[AI Error] ${err.message}`,
+      executionTime: 0,
+      error: err.message,
+    }));
+  }
 }
 
 /**
@@ -82,17 +128,46 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const [runResults, setRunResults] = useState(null);
   const [submitResults, setSubmitResults] = useState(null);
   const [activeTab, setActiveTab] = useState('problem'); // 'problem' | 'testcases' | 'results'
+  const [aiAnalysis, setAiAnalysis] = useState(null); // AI debug result
+  const [aiLoading, setAiLoading] = useState(false);
   const textareaRef = useRef(null);
 
   useEffect(() => {
     if (!readOnly && !submitted) {
-      // Force the code to update to the specific function signature for this question
-      setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
+      if (question?.titleSlug) {
+        setCode('// Loading exact LeetCode parameters...');
+        const query = `query questionEditorData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`;
+        fetch('/Mockmate-interview-platform/api/leetcode-graphql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
+        })
+          .then(res => res.json())
+          .then(data => {
+            const snippets = data?.data?.question?.codeSnippets || [];
+            if (!snippets || snippets.length === 0) throw new Error("No snippets found");
+            const snip = snippets.find(s => s.langSlug === language || s.langSlug === (language==='cpp'?'cpp':'') || s.lang.toLowerCase() === language);
+            if (snip) {
+              let exactCode = snip.code;
+              if (language === 'cpp') exactCode = `#include <bits/stdc++.h>\nusing namespace std;\n\n${exactCode}`;
+              if (language === 'java') exactCode = `import java.util.*;\n\n${exactCode}`;
+              if (language === 'python') exactCode = `import math\nimport collections\n\n${exactCode}`;
+              setCode(exactCode);
+            } else {
+              setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
+            }
+          })
+          .catch(() => {
+            setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
+          });
+      } else {
+        setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
+      }
       setRunResults(null);
       setSubmitResults(null);
       setActiveTab('problem');
     }
-  }, [question, language, readOnly, submitted]);
+  }, [question?.id, question?.titleSlug, language]);
 
   // Switch language → load starter code
   const switchLanguage = (lang) => {
@@ -115,68 +190,86 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     }
   };
 
+  // AI Debug — full intelligent code review
+  const handleAIDebug = useCallback(async () => {
+    setAiLoading(true);
+    setAiAnalysis(null);
+    setActiveTab('results');
+    try {
+      const problemText = question?.problemStatement || question?.question || question?.text || 'Solve the given problem';
+      const testCasesForAI = (question?.testCases || []).slice(0, 3);
+      // If no test cases, create a placeholder so AI still reviews the code
+      if (testCasesForAI.length === 0 && question?.examples?.length > 0) {
+        question.examples.slice(0, 2).forEach(ex => {
+          testCasesForAI.push({ input: ex.input || '', expectedOutput: ex.output || ex.expectedOutput || '' });
+        });
+      }
+      const analysis = await analyzeCode(code, language, problemText, testCasesForAI);
+      setAiAnalysis(analysis);
+    } catch (err) {
+      setAiAnalysis({ error: err.message, compiles: false, bugs: ['Failed to connect to AI engine — make sure backend is running on port 5000'], suggestions: [], overallVerdict: 'error', score: 0 });
+    }
+    setAiLoading(false);
+  }, [code, language, question]);
+
   // Run against visible test cases only
-  const handleRun = useCallback(() => {
+  const handleRun = useCallback(async () => {
     setRunning(true);
     setActiveTab('results');
-    setTimeout(() => {
-      const visibleCases = (question?.testCases || []).filter(tc => !tc.isHidden).slice(0, 3);
-      if (!visibleCases.length) {
-        visibleCases.push({ input: 'sample input', expectedOutput: 'sample output', isHidden: false });
-      }
-      let results;
-      if (language === 'javascript') {
-        results = visibleCases.map(tc => runJavaScript(code, tc.input)).map((r, i) => ({
-          passed: !r.error && r.output.trim() === visibleCases[i].expectedOutput.trim(),
-          input: visibleCases[i].input,
-          expectedOutput: visibleCases[i].expectedOutput,
-          actualOutput: r.error ? `Error: ${r.error}` : r.output,
-          executionTime: Math.floor(Math.random() * 50) + 10,
-          error: r.error || '',
-        }));
-      } else {
-        results = mockRun(language, visibleCases);
-      }
-      setRunResults(results);
-      setRunning(false);
-    }, 800);
+    const visibleCases = (question?.testCases || []).filter(tc => !tc.isHidden).slice(0, 3);
+    if (!visibleCases.length) {
+      visibleCases.push({ input: 'sample input', expectedOutput: 'sample output', isHidden: false });
+    }
+    let results;
+    if (language === 'javascript') {
+      results = visibleCases.map(tc => runJavaScript(code, tc.input)).map((r, i) => ({
+        passed: !r.error && r.output.trim() === visibleCases[i].expectedOutput.trim(),
+        input: visibleCases[i].input,
+        expectedOutput: visibleCases[i].expectedOutput,
+        actualOutput: r.error ? `Error: ${r.error}` : r.output,
+        executionTime: Math.floor(Math.random() * 50) + 10,
+        error: r.error || '',
+      }));
+    } else {
+      results = await aiRun(language, code, question?.problemStatement || '', visibleCases);
+    }
+    setRunResults(results);
+    setRunning(false);
   }, [code, language, question]);
 
   // Submit — runs against ALL test cases
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     setRunning(true);
-    setTimeout(() => {
-      const allCases = question?.testCases || [];
-      const cases = allCases.length ? allCases : [{ input: 'test', expectedOutput: 'output', isHidden: false }];
-      let results;
-      if (language === 'javascript') {
-        results = cases.map(tc => {
-          const r = runJavaScript(code, tc.input);
-          return {
-            passed: !r.error && r.output.trim() === (tc.expectedOutput || '').trim(),
-            input: tc.input,
-            expectedOutput: tc.expectedOutput,
-            actualOutput: r.error ? `Error: ${r.error}` : r.output,
-            executionTime: Math.floor(Math.random() * 60) + 5,
-            error: r.error || '',
-          };
-        });
-      } else {
-        results = mockRun(language, cases);
-      }
-      const passedCount = results.filter(r => r.passed).length;
-      const totalTests  = results.length;
-      const score = Math.round((passedCount / totalTests) * 100);
-      const status = passedCount === totalTests ? 'accepted'
-        : results.some(r => r.error) ? 'runtime_error' : 'wrong_answer';
+    const allCases = question?.testCases || [];
+    const cases = allCases.length ? allCases : [{ input: 'test', expectedOutput: 'output', isHidden: false }];
+    let results;
+    if (language === 'javascript') {
+      results = cases.map(tc => {
+        const r = runJavaScript(code, tc.input);
+        return {
+          passed: !r.error && r.output.trim() === (tc.expectedOutput || '').trim(),
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+          actualOutput: r.error ? `Error: ${r.error}` : r.output,
+          executionTime: Math.floor(Math.random() * 60) + 5,
+          error: r.error || '',
+        };
+      });
+    } else {
+      results = await aiRun(language, code, question?.problemStatement || '', cases);
+    }
+    const passedCount = results.filter(r => r.passed).length;
+    const totalTests  = results.length;
+    const score = Math.round((passedCount / totalTests) * 100);
+    const status = passedCount === totalTests ? 'accepted'
+      : results.some(r => r.error) ? 'runtime_error' : 'wrong_answer';
 
-      const result = { language, code, testResults: results, passedCount, totalTests, score, status };
-      setSubmitResults(result);
-      setSubmitted(true);
-      setActiveTab('results');
-      setRunning(false);
-      onSubmit && onSubmit(result);
-    }, 1200);
+    const result = { language, code, testResults: results, passedCount, totalTests, score, status };
+    setSubmitResults(result);
+    setSubmitted(true);
+    setActiveTab('results');
+    setRunning(false);
+    onSubmit && onSubmit(result);
   }, [code, language, question, onSubmit]);
 
   const testCases = (question?.testCases || []).filter(tc => !tc.isHidden);
@@ -254,8 +347,43 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
 
           {activeTab === 'results' && (
             <div className="ce-results">
-              {!runResults && !submitResults && (
-                <p className="ce-empty">Run your code to see results here.</p>
+              {!runResults && !submitResults && !aiAnalysis && (
+                <p className="ce-empty">Run your code or use AI Debug to see results here.</p>
+              )}
+
+              {/* AI Debug Analysis Panel */}
+              {aiAnalysis && (
+                <div className="ce-ai-analysis">
+                  <div className="ce-ai-header">
+                    <AIIcon /> <strong>Verge1.o Code Analysis</strong>
+                    <span className={`ce-ai-verdict ${aiAnalysis.overallVerdict === 'accepted' ? 'ce-badge--pass' : 'ce-badge--fail'}`}>
+                      {aiAnalysis.overallVerdict?.toUpperCase() || 'UNKNOWN'} — {aiAnalysis.score ?? 0}%
+                    </span>
+                  </div>
+                  {aiAnalysis.compiles === false && (
+                    <div className="ce-ai-section ce-ai-error">
+                      <strong>Compilation Errors:</strong>
+                      {(aiAnalysis.syntaxErrors || []).map((e, i) => <div key={i}>• {e}</div>)}
+                    </div>
+                  )}
+                  {aiAnalysis.bugs?.length > 0 && (
+                    <div className="ce-ai-section ce-ai-bugs">
+                      <strong>Bugs Detected:</strong>
+                      {aiAnalysis.bugs.map((b, i) => <div key={i}>• {b}</div>)}
+                    </div>
+                  )}
+                  {aiAnalysis.suggestions?.length > 0 && (
+                    <div className="ce-ai-section ce-ai-suggestions">
+                      <strong>Optimization Suggestions:</strong>
+                      {aiAnalysis.suggestions.map((s, i) => <div key={i}>• {s}</div>)}
+                    </div>
+                  )}
+                  {aiAnalysis.error && (
+                    <div className="ce-ai-section ce-ai-error">
+                      <strong>AI Error:</strong> {aiAnalysis.error}
+                    </div>
+                  )}
+                </div>
               )}
 
               {(submitResults || runResults) && (() => {
@@ -353,6 +481,15 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
               onClick={handleRun}
               disabled={running || submitted}>
               <PlayIcon /> {running && !submitted ? 'Running…' : 'Run Code'}
+            </button>
+            <button
+              id="ai-debug-btn"
+              className="ce-ai-btn"
+              onClick={handleAIDebug}
+              disabled={aiLoading || submitted}
+              title="Analyze code with Verge1.o AI"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}>
+              <AIIcon /> {aiLoading ? 'Analyzing…' : 'AI Debug'}
             </button>
             <button
               id="submit-code-btn"

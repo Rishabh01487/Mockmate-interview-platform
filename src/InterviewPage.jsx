@@ -146,17 +146,18 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
   const [responses, setResponses]   = useState([]);
   const [loading, setLoading]       = useState(false);
 
-  const q     = questions[qIdx];
+  const rawQ = questions[qIdx] || null;
+  const q = rawQ ? { ...rawQ, questionType: ['mcq', 'coding'].includes(rawQ.questionType) ? rawQ.questionType : 'text' } : null;
   const total = questions.length;
-  const qType = q.questionType || 'text'; // 'text' | 'mcq' | 'coding'
+  const qType = q ? q.questionType : 'text';
 
   const { fmt, pct, color } = useTimer(
-    q.timeLimit || 120,
+    q?.timeLimit || 120,
     () => { if (!submitted) saveResponse({ timedOut: true, score: 0, answer: '[Time expired]' }); }
   );
 
-  // Centralised response recorder
   const saveResponse = useCallback((fields) => {
+    if (!q) return;
     const newResp = {
       question:       q.question || q.text || q.problemStatement || '',
       questionType:   qType,

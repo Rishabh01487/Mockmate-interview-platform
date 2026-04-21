@@ -37,7 +37,7 @@ if (process.env.NODE_ENV !== 'production') {
 // ════════════════════════════════════════════════════════════
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mockmate')
   .then(() => console.log('✓ MongoDB connected'))
-  .catch(err => { console.error('✗ MongoDB:', err.message); process.exit(1); });
+  .catch(err => { console.warn('⚠️ MongoDB connection failed (Server running in offline mode):', err.message); });
 
 // ════════════════════════════════════════════════════════════
 //  Middleware Helpers
@@ -87,6 +87,82 @@ app.get('/api/auth/profile', authenticate, async (req, res) => {
 
 app.patch('/api/auth/profile',  authenticate, updateProfile);
 app.patch('/api/auth/password', authenticate, changePassword);
+
+// ════════════════════════════════════════════════════════════
+//  LeetCode Live API Proxy
+// ════════════════════════════════════════════════════════════
+app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
+  try {
+    const query = `query questionEditorData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`;
+    const response = await fetch('https://leetcode.com/graphql/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      body: JSON.stringify({ query, variables: { titleSlug: req.params.titleSlug } })
+    });
+    const data = await response.json();
+    res.json(data?.data?.question?.codeSnippets || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  Verge1.o — AI Proxy (Ollama Cloud at ollama.com/api)
+// ════════════════════════════════════════════════════════════
+const AI_API_URL = process.env.OLLAMA_API_URL || 'https://ollama.com';
+const AI_API_KEY = process.env.OLLAMA_API_KEY || '';
+
+// Build headers — include API key if configured
+const aiHeaders = (extra = {}) => {
+  const h = { 'Content-Type': 'application/json', ...extra };
+  if (AI_API_KEY) h['Authorization'] = `Bearer ${AI_API_KEY}`;
+  return h;
+};
+
+// Health check — verifies Ollama cloud is reachable
+app.get('/api/ai/health', async (req, res) => {
+  try {
+    const check = await fetch(`${AI_API_URL}/api/tags`, {
+      headers: aiHeaders(),
+      signal: AbortSignal.timeout(5000)
+    });
+    if (check.ok) {
+      const data = await check.json();
+      res.json({ status: 'online', online: true, models: data.models?.map(m => m.name) || [] });
+    } else {
+      res.json({ status: 'error', online: false });
+    }
+  } catch (err) {
+    res.json({ status: 'offline', online: false, error: err.message });
+  }
+});
+
+// Chat proxy — forwards to Ollama using native /api/chat
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { messages, model, temperature = 0.7 } = req.body;
+    const response = await fetch(`${AI_API_URL}/api/chat`, {
+      method: 'POST',
+      headers: aiHeaders(),
+      body: JSON.stringify({
+        model: model || 'gemma3:12b',
+        messages,
+        stream: false,
+        options: { temperature }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: errText });
+    }
+
+    const data = await response.json();
+    res.json({ message: data.message || { content: '', role: 'assistant' } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ════════════════════════════════════════════════════════════
 //  Question Routes   /api/questions

@@ -148,6 +148,9 @@ const Hero = ({ onStartInterview, onOpenRoom }) => (
           <span className="hero-stat-label">Difficulty Levels</span>
         </div>
       </div>
+      <blockquote className="hero-quote">
+        <p>"A mock interview is not merely a rehearsal — it is a crucible where apprehension is refined into poise, hesitation into articulation, and potential into undeniable competence."</p>
+      </blockquote>
     </div>
 
     <div className="hero-visual" aria-hidden="true">
