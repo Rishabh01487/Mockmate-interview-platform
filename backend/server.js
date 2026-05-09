@@ -25,7 +25,24 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mockmate-dev-secret';
 // ════════════════════════════════════════════════════════════
 //  Core Middleware
 // ════════════════════════════════════════════════════════════
-app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
+const allowedOrigins = [
+  process.env.CLIENT_URL || 'http://localhost:5173',
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+  /\.vercel\.app$/,  // allow all *.vercel.app subdomains
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, same-origin SSR)
+    if (!origin) return callback(null, true);
+    const allowed = allowedOrigins.some(o =>
+      o instanceof RegExp ? o.test(origin) : o === origin
+    );
+    callback(allowed ? null : new Error('Not allowed by CORS'), allowed);
+  },
+  credentials: true
+}));
+
 app.use(express.json({ limit: '50kb' }));
 
 if (process.env.NODE_ENV !== 'production') {
@@ -700,4 +717,9 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
-app.listen(PORT, () => console.log(`✓ MockMate API → http://localhost:${PORT}`));
+// Only start the HTTP server when running directly (not when imported by Vercel)
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`✓ MockMate API → http://localhost:${PORT}`));
+}
+
+module.exports = app;

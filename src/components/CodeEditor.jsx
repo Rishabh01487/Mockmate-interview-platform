@@ -137,7 +137,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
       if (question?.titleSlug) {
         setCode('// Loading exact LeetCode parameters...');
         const query = `query questionEditorData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`;
-        fetch('/Mockmate-interview-platform/api/leetcode-graphql', {
+        fetch(`${import.meta.env.BASE_URL}api/leetcode-graphql`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
