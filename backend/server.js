@@ -128,11 +128,11 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 //  Ollama cloud:   set OLLAMA_API_URL + OLLAMA_API_KEY
 //  OpenAI-compat:  set AI_API_URL + AI_API_KEY + AI_MODEL
 // ════════════════════════════════════════════════════════════
-const OLLAMA_URL = process.env.OLLAMA_API_URL || '';
-const OLLAMA_KEY = process.env.OLLAMA_API_KEY || '';
-const OAI_URL    = process.env.AI_API_URL || '';
-const OAI_KEY    = process.env.AI_API_KEY || '';
-const AI_MODEL   = process.env.AI_MODEL || 'llama3-70b-8192';
+const OLLAMA_URL = (process.env.OLLAMA_API_URL || '').trim();
+const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || '').trim();
+const OAI_URL    = (process.env.AI_API_URL || '').trim();
+const OAI_KEY    = (process.env.AI_API_KEY || '').trim();
+const AI_MODEL   = (process.env.AI_MODEL || 'Meta-Llama-3.1-70B-Instruct').trim();
 
 // Use Ollama native format if OLLAMA_API_URL is set (and not overridden by AI_API_URL)
 const USE_OLLAMA = !!OLLAMA_URL && !OAI_URL;
