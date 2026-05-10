@@ -1,0 +1,4 @@
+# Tell Vercel to ignore the backend folder
+# The backend is deployed separately on Render.com
+backend/
+api/
