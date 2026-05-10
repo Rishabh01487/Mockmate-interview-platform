@@ -28,7 +28,7 @@ export async function isOllamaOnline() {
  * @returns {Promise<string>} The assistant's response text
  */
 export async function chatCompletion(messages, options = {}) {
-  const { model = 'gemma3:12b', temperature = 0.7 } = options;
+  const { model = null, temperature = 0.7 } = options;  // null → backend uses AI_MODEL env var
 
   const res = await fetch(`${AI_BASE}/chat`, {
     method: 'POST',

@@ -33,15 +33,19 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (curl, Postman, same-origin SSR)
     if (!origin) return callback(null, true);
     const allowed = allowedOrigins.some(o =>
       o instanceof RegExp ? o.test(origin) : o === origin
     );
     callback(allowed ? null : new Error('Not allowed by CORS'), allowed);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Handle OPTIONS preflight for all routes
+app.options('*', cors());
 
 app.use(express.json({ limit: '50kb' }));
 
@@ -104,6 +108,40 @@ app.get('/api/auth/profile', authenticate, async (req, res) => {
 
 app.patch('/api/auth/profile',  authenticate, updateProfile);
 app.patch('/api/auth/password', authenticate, changePassword);
+
+// ════════════════════════════════════════════════════════════
+//  Live Rooms — Simple cross-browser room sharing
+//  Stores full room JSON in server memory (no DB schema needed)
+//  Both interviewer and candidate connect to same Render server
+// ════════════════════════════════════════════════════════════
+const LIVE_ROOMS = new Map();
+
+// Create a live room (interviewer)
+app.post('/api/live-rooms', (req, res) => {
+  const { room } = req.body;
+  if (!room || !room.roomCode) return res.status(400).json({ success: false, message: 'Invalid room data' });
+  LIVE_ROOMS.set(room.roomCode.toUpperCase(), room);
+  // Auto-cleanup after 48 hours
+  setTimeout(() => LIVE_ROOMS.delete(room.roomCode.toUpperCase()), 48 * 60 * 60 * 1000);
+  res.json({ success: true, code: room.roomCode });
+});
+
+// Join a live room (candidate)
+app.get('/api/live-rooms/:code', (req, res) => {
+  const room = LIVE_ROOMS.get(req.params.code.toUpperCase());
+  if (!room) return res.status(404).json({ success: false, message: 'Room not found. Check the code or ask the interviewer to create a new room.' });
+  res.json({ success: true, room });
+});
+
+// Update room state (violations, answers, status)
+app.patch('/api/live-rooms/:code', (req, res) => {
+  const code = req.params.code.toUpperCase();
+  const room = LIVE_ROOMS.get(code);
+  if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
+  const updated = { ...room, ...req.body };
+  LIVE_ROOMS.set(code, updated);
+  res.json({ success: true, room: updated });
+});
 
 // ════════════════════════════════════════════════════════════
 //  LeetCode Live API Proxy

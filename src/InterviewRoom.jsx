@@ -6,6 +6,7 @@ import AnalyticsDashboard from './components/AnalyticsDashboard';
 import './components/AnalyticsDashboard.css';
 import { CATEGORIES, questions } from './data/questions';
 import { generateQuestions, isOllamaOnline } from './services/ollamaService';
+import { API_BASE } from './config/api.js';
 
 // ── Icons ───────────────────────────────────────────────────
 const Ic = ({ d, size = 16, sw = 2 }) => (
@@ -50,9 +51,17 @@ function useCountdown(totalSeconds, onExpire, resetKey = 0) {
 }
 
 // ════════════════════════════════════════════════════════════
-//  ACTIVE ROOMS MEMORY STORE
+//  LIVE ROOMS — API helpers (replaces in-memory ACTIVE_ROOMS)
 // ════════════════════════════════════════════════════════════
-const ACTIVE_ROOMS = {};
+const postLiveRoom = (room) =>
+  fetch(`${API_BASE}/api/live-rooms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ room }),
+  }).then(r => r.json());
+
+const getLiveRoom = (code) =>
+  fetch(`${API_BASE}/api/live-rooms/${code.toUpperCase()}`).then(r => r.json());
 
 // ════════════════════════════════════════════════════════════
 //  CREATE ROOM (Interviewer)
@@ -151,41 +160,39 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
     setSelectedQs(prev => prev.find(x => x.id === q.id) ? prev.filter(x => x.id !== q.id) : [...prev, taggedQ]);
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!selectedQs.length) return;
     setCreating(true);
-    setTimeout(() => {
+    try {
       const code = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      const groups = {};
+      selectedQs.forEach(q => {
+        const dom = q._domain || 'dsa';
+        if (!groups[dom]) groups[dom] = [];
+        groups[dom].push(q);
+      });
       const room = {
         roomCode: code,
         title: title || 'MockMate Interview',
         candidateEmail,
         settings: { timeLimitMinutes, proctoring: { tabSwitchLimit, blockOnTabSwitch: true, requireInterviewerRevive: true } },
         assignedQuestions: selectedQs.map((q, i) => ({ ...q, orderIndex: i })),
-        // Group questions by domain for multi-domain flow
-        domainGroups: (() => {
-          const groups = {};
-          selectedQs.forEach(q => {
-            const dom = q._domain || 'dsa';
-            if (!groups[dom]) groups[dom] = [];
-            groups[dom].push(q);
-          });
-          return Object.entries(groups).map(([domain, qs]) => ({
-            domain,
-            questions: qs,
-            timeMinutes: Math.max(5, Math.round(timeLimitMinutes / Object.keys(groups).length))
-          }));
-        })(),
+        domainGroups: Object.entries(groups).map(([domain, qs]) => ({
+          domain, questions: qs,
+          timeMinutes: Math.max(5, Math.round(timeLimitMinutes / Object.keys(groups).length))
+        })),
         status: 'waiting',
         violations: [],
         suspension: { isSuspended: false },
         scores: { overall: 0, mcq: 0, coding: 0, text: 0 },
         candidateAnswers: [],
       };
-      ACTIVE_ROOMS[code] = room;
-      setCreating(false);
+      await postLiveRoom(room);
       onRoomCreated(room);
-    }, 800);
+    } catch (err) {
+      console.error('Failed to create room:', err);
+    }
+    setCreating(false);
   };
 
   const qTypeBadge = (t) => ({ mcq: 'MCQ', coding: 'Code', text: 'Text' }[t] || t);
@@ -465,23 +472,23 @@ const JoinRoom = ({ onJoined, onBack }) => {
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (code.trim().length !== 6) { setError('Room code must be 6 characters'); return; }
     setJoining(true);
     setError('');
-    setTimeout(() => {
-      const formattedCode = code.toUpperCase();
-      const actualRoom = ACTIVE_ROOMS[formattedCode];
-      
-      if (!actualRoom) {
+    try {
+      const data = await getLiveRoom(code);
+      if (!data.success) {
+        setError(data.message || 'Room not found. Check the code and try again.');
         setJoining(false);
-        setError('Invalid Room Code. Room not found.');
         return;
       }
-      
       setJoining(false);
-      onJoined(actualRoom);
-    }, 900);
+      onJoined(data.room);
+    } catch (err) {
+      setError('Could not connect to server. Please try again.');
+      setJoining(false);
+    }
   };
 
   return (
