@@ -108,6 +108,7 @@ app.get('/api/auth/profile', authenticate, async (req, res) => {
 
 app.patch('/api/auth/profile',  authenticate, updateProfile);
 app.patch('/api/auth/password', authenticate, changePassword);
+require('./seedRoute')(app); // ONE-TIME SEED — remove after seeding
 
 // ════════════════════════════════════════════════════════════
 //  Live Rooms — Simple cross-browser room sharing
