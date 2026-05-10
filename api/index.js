@@ -1,5 +1,3 @@
-// Vercel Serverless Entry Point
-// This file re-exports the Express app from backend/server.js as a serverless function.
-// Vercel will invoke this file for all /api/* requests.
-
-module.exports = require('../backend/server.js');
+// This file is no longer used.
+// The backend is now deployed separately on Render.com
+// See render.yaml for the Render deployment configuration.

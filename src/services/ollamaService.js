@@ -1,10 +1,11 @@
 // ════════════════════════════════════════════════════════════
 //  Verge1.o — Cloud AI Service Layer
-//  Routes through backend proxy → SambaNova Cloud API
-//  API key is stored securely in backend/.env
+//  Dev:  calls go to http://localhost:5000 via Vite proxy
+//  Prod: calls go to https://your-backend.onrender.com
 // ════════════════════════════════════════════════════════════
+import { API_BASE } from '../config/api.js';
 
-const AI_BASE = '/api/ai';
+const AI_BASE = `${API_BASE}/api/ai`;
 
 /**
  * Check if the AI backend is reachable and API key is configured

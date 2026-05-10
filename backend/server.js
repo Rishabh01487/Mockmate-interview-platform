@@ -124,62 +124,72 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-//  Verge1.o — AI Proxy (Ollama Cloud at ollama.com/api)
+//  Verge1.o — AI Proxy (auto-detects Ollama or OpenAI format)
+//  Ollama cloud:   set OLLAMA_API_URL + OLLAMA_API_KEY
+//  OpenAI-compat:  set AI_API_URL + AI_API_KEY + AI_MODEL
 // ════════════════════════════════════════════════════════════
-const AI_API_URL = process.env.OLLAMA_API_URL || 'https://ollama.com';
-const AI_API_KEY = process.env.OLLAMA_API_KEY || '';
+const OLLAMA_URL = process.env.OLLAMA_API_URL || '';
+const OLLAMA_KEY = process.env.OLLAMA_API_KEY || '';
+const OAI_URL    = process.env.AI_API_URL || '';
+const OAI_KEY    = process.env.AI_API_KEY || '';
+const AI_MODEL   = process.env.AI_MODEL || 'llama3-70b-8192';
 
-// Build headers — include API key if configured
-const aiHeaders = (extra = {}) => {
-  const h = { 'Content-Type': 'application/json', ...extra };
-  if (AI_API_KEY) h['Authorization'] = `Bearer ${AI_API_KEY}`;
-  return h;
-};
+// Use Ollama native format if OLLAMA_API_URL is set (and not overridden by AI_API_URL)
+const USE_OLLAMA = !!OLLAMA_URL && !OAI_URL;
+const AI_BASE_URL = USE_OLLAMA
+  ? OLLAMA_URL.replace(/\/$/, '')
+  : (OAI_URL || 'http://localhost:11434/v1').replace(/\/$/, '');
+const AI_KEY = USE_OLLAMA ? OLLAMA_KEY : OAI_KEY;
 
-// Health check — verifies Ollama cloud is reachable
+// Health check — works for both Ollama and OpenAI providers
 app.get('/api/ai/health', async (req, res) => {
   try {
-    const check = await fetch(`${AI_API_URL}/api/tags`, {
-      headers: aiHeaders(),
-      signal: AbortSignal.timeout(5000)
+    const checkUrl = USE_OLLAMA ? `${AI_BASE_URL}/api/tags` : `${AI_BASE_URL}/models`;
+    const check = await fetch(checkUrl, {
+      headers: { 'Authorization': `Bearer ${AI_KEY}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(6000)
     });
-    if (check.ok) {
-      const data = await check.json();
-      res.json({ status: 'online', online: true, models: data.models?.map(m => m.name) || [] });
-    } else {
-      res.json({ status: 'error', online: false });
-    }
+    res.json({ status: check.ok ? 'online' : 'error', online: check.ok, provider: AI_BASE_URL });
   } catch (err) {
     res.json({ status: 'offline', online: false, error: err.message });
   }
 });
 
-// Chat proxy — forwards to Ollama using native /api/chat
+// Chat proxy — routes to correct format automatically
 app.post('/api/ai/chat', async (req, res) => {
   try {
     const { messages, model, temperature = 0.7 } = req.body;
-    const response = await fetch(`${AI_API_URL}/api/chat`, {
-      method: 'POST',
-      headers: aiHeaders(),
-      body: JSON.stringify({
-        model: model || 'gemma3:12b',
-        messages,
-        stream: false,
-        options: { temperature }
-      })
-    });
+    let response;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({ error: errText });
+    if (USE_OLLAMA) {
+      // Ollama native format: /api/chat
+      response = await fetch(`${AI_BASE_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
+        body: JSON.stringify({ model: model || 'gemma3:12b', messages, stream: false, options: { temperature } }),
+        signal: AbortSignal.timeout(60000)
+      });
+      if (!response.ok) return res.status(response.status).json({ error: await response.text() });
+      const data = await response.json();
+      return res.json({ message: data.message || { content: '', role: 'assistant' } });
+    } else {
+      // OpenAI-compatible format: /v1/chat/completions
+      response = await fetch(`${AI_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
+        body: JSON.stringify({ model: model || AI_MODEL, messages, temperature, max_tokens: 4096, stream: false }),
+        signal: AbortSignal.timeout(60000)
+      });
+      if (!response.ok) return res.status(response.status).json({ error: await response.text() });
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      return res.json({ message: { content, role: 'assistant' } });
     }
-
-    const data = await response.json();
-    res.json({ message: data.message || { content: '', role: 'assistant' } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // ════════════════════════════════════════════════════════════
 //  Question Routes   /api/questions

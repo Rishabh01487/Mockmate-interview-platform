@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { API_BASE } from '../config/api.js';
 import { analyzeCode, isOllamaOnline } from '../services/ollamaService';
 
 // ── Icons ─────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
       if (question?.titleSlug) {
         setCode('// Loading exact LeetCode parameters...');
         const query = `query questionEditorData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`;
-        fetch(`${import.meta.env.BASE_URL}api/leetcode-graphql`, {
+        fetch(`${API_BASE}/api/leetcode-graphql`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })

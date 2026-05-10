@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: mockmate-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false          # Set in Render dashboard → from MongoDB Atlas
+      - key: JWT_SECRET
+        sync: false          # Set in Render dashboard → any long random string
+      - key: OLLAMA_API_URL
+        value: https://ollama.com
+      - key: OLLAMA_API_KEY
+        sync: false          # Set in Render dashboard → your existing Ollama API key
+      - key: CLIENT_URL
+        sync: false          # Set in Render dashboard → your Vercel frontend URL
+    healthCheckPath: /api/health
