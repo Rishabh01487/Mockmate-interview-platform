@@ -83,7 +83,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
     setAiError('');
     try {
       const online = await isOllamaOnline();
-      if (!online) throw new Error('Ollama is not running. Start it with: ollama serve');
+      if (!online) throw new Error('AI service is currently unavailable. Please try again later.');
       const newQs = await generateQuestions(selectedCat, 10, null, questionTypeFilter);
       setAiQuestions(prev => [...prev, ...newQs]);
     } catch (err) {
