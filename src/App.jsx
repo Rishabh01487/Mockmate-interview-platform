@@ -33,28 +33,31 @@ function AppInner() {
 
   return (
     <div id="app-root">
-      {/* User info bar */}
-      <div style={{
-        position: 'fixed', top: 12, right: 16, zIndex: 9999,
-        display: 'flex', alignItems: 'center', gap: '0.6rem',
-        background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 10, padding: '0.4rem 0.75rem',
-      }}>
-        <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
-          👤 {user?.name || user?.email}
-        </span>
-        <button
-          onClick={logout}
-          style={{
-            background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.2)',
-            color: '#fca5a5', borderRadius: 6, padding: '0.25rem 0.6rem',
-            fontSize: '0.75rem', cursor: 'pointer', fontWeight: 500,
-          }}
-        >
-          Logout
-        </button>
-      </div>
+      {/* Slim top bar — only on home page so it doesn't block interview/room UI */}
+      {page === 'home' && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          padding: '0.5rem 1.25rem',
+          background: 'rgba(10,10,12,0.85)', backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          gap: '0.75rem',
+        }}>
+          <span style={{ color: '#6b7280', fontSize: '0.78rem' }}>
+            👤 {user?.name || user?.email}
+          </span>
+          <button
+            onClick={logout}
+            style={{
+              background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)',
+              color: '#fca5a5', borderRadius: 6, padding: '0.28rem 0.65rem',
+              fontSize: '0.75rem', cursor: 'pointer', fontWeight: 500,
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      )}
 
       {page === 'home' && (
         <HomePage

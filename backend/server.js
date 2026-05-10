@@ -110,38 +110,85 @@ app.patch('/api/auth/profile',  authenticate, updateProfile);
 app.patch('/api/auth/password', authenticate, changePassword);
 
 // ════════════════════════════════════════════════════════════
-//  Live Rooms — Simple cross-browser room sharing
-//  Stores full room JSON in server memory (no DB schema needed)
-//  Both interviewer and candidate connect to same Render server
+//  Live Rooms — MongoDB-backed (survives Render spin-downs)
+//  Uses a lightweight schema with TTL auto-delete after 48h
 // ════════════════════════════════════════════════════════════
+const liveRoomCacheSchema = new mongoose.Schema({
+  roomCode: { type: String, required: true, unique: true, uppercase: true, trim: true },
+  data:     { type: mongoose.Schema.Types.Mixed, required: true },
+  createdAt:{ type: Date, default: Date.now },
+});
+liveRoomCacheSchema.index({ createdAt: 1 }, { expireAfterSeconds: 172800 }); // auto-delete after 48h
+const LiveRoomCache = mongoose.model('LiveRoomCache', liveRoomCacheSchema);
+
+// In-memory cache for speed (lost on restart, MongoDB is the source of truth)
 const LIVE_ROOMS = new Map();
 
-// Create a live room (interviewer)
-app.post('/api/live-rooms', (req, res) => {
+// POST /api/live-rooms — interviewer creates a room
+app.post('/api/live-rooms', async (req, res) => {
   const { room } = req.body;
   if (!room || !room.roomCode) return res.status(400).json({ success: false, message: 'Invalid room data' });
-  LIVE_ROOMS.set(room.roomCode.toUpperCase(), room);
-  // Auto-cleanup after 48 hours
-  setTimeout(() => LIVE_ROOMS.delete(room.roomCode.toUpperCase()), 48 * 60 * 60 * 1000);
-  res.json({ success: true, code: room.roomCode });
+  const code = room.roomCode.toUpperCase();
+  try {
+    // Upsert in MongoDB so re-creating same code works
+    await LiveRoomCache.findOneAndUpdate(
+      { roomCode: code },
+      { roomCode: code, data: room, createdAt: new Date() },
+      { upsert: true, new: true }
+    );
+    LIVE_ROOMS.set(code, room); // also cache in memory for speed
+    res.json({ success: true, code });
+  } catch (err) {
+    console.error('[POST /api/live-rooms]', err.message);
+    // Fallback: memory-only if DB write fails
+    LIVE_ROOMS.set(code, room);
+    res.json({ success: true, code, warning: 'Saved in memory only' });
+  }
 });
 
-// Join a live room (candidate)
-app.get('/api/live-rooms/:code', (req, res) => {
-  const room = LIVE_ROOMS.get(req.params.code.toUpperCase());
-  if (!room) return res.status(404).json({ success: false, message: 'Room not found. Check the code or ask the interviewer to create a new room.' });
-  res.json({ success: true, room });
-});
-
-// Update room state (violations, answers, status)
-app.patch('/api/live-rooms/:code', (req, res) => {
+// GET /api/live-rooms/:code — candidate joins a room
+app.get('/api/live-rooms/:code', async (req, res) => {
   const code = req.params.code.toUpperCase();
-  const room = LIVE_ROOMS.get(code);
-  if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
-  const updated = { ...room, ...req.body };
-  LIVE_ROOMS.set(code, updated);
-  res.json({ success: true, room: updated });
+  // 1. Check memory cache first (fast path)
+  if (LIVE_ROOMS.has(code)) {
+    return res.json({ success: true, room: LIVE_ROOMS.get(code) });
+  }
+  // 2. Fallback to MongoDB (handles Render spin-down case)
+  try {
+    const cached = await LiveRoomCache.findOne({ roomCode: code });
+    if (!cached) {
+      return res.status(404).json({ success: false, message: 'Room not found. Check the code or ask the interviewer to create a new room.' });
+    }
+    LIVE_ROOMS.set(code, cached.data); // restore to memory cache
+    return res.json({ success: true, room: cached.data });
+  } catch (err) {
+    console.error('[GET /api/live-rooms/:code]', err.message);
+    return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
+  }
 });
+
+// PATCH /api/live-rooms/:code — update room state (violations, status, answers)
+app.patch('/api/live-rooms/:code', async (req, res) => {
+  const code = req.params.code.toUpperCase();
+  try {
+    // Get current data from memory or DB
+    let room = LIVE_ROOMS.get(code);
+    if (!room) {
+      const cached = await LiveRoomCache.findOne({ roomCode: code });
+      if (!cached) return res.status(404).json({ success: false, message: 'Room not found' });
+      room = cached.data;
+    }
+    const updated = { ...room, ...req.body };
+    // Update both memory and MongoDB
+    LIVE_ROOMS.set(code, updated);
+    await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: updated });
+    res.json({ success: true, room: updated });
+  } catch (err) {
+    console.error('[PATCH /api/live-rooms/:code]', err.message);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 
 // ════════════════════════════════════════════════════════════
 //  LeetCode Live API Proxy
