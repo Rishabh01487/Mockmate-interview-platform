@@ -1,4 +1,6 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']); // Force Google DNS — bypasses ISP DNS that blocks Atlas SRV records
 const mongoose = require('mongoose');
 const Question = require('../models/QuestionSchema');
 
