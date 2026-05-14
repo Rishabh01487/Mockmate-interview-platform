@@ -1,4 +1,6 @@
 require('dotenv').config();
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']); // Force Google DNS — fixes Atlas SRV lookup on local machines
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');

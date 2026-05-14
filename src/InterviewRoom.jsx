@@ -60,8 +60,33 @@ const postLiveRoom = (room) =>
     body: JSON.stringify({ room }),
   }).then(r => r.json());
 
-const getLiveRoom = (code) =>
-  fetch(`${API_BASE}/api/live-rooms/${code.toUpperCase()}`).then(r => r.json());
+const getLiveRoom = async (code) => {
+  try {
+    const res = await fetch(`${API_BASE}/api/live-rooms/${code.toUpperCase()}`);
+    if (!res.ok) {
+      // Handle 404, 410 (expired), 500, etc.
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, message: errData.message || `Room not found (HTTP ${res.status})` };
+    }
+    return await res.json();
+  } catch (err) {
+    return { success: false, message: 'Could not connect to server. Please check your connection and try again.' };
+  }
+};
+
+const patchLiveRoom = async (code, updates) => {
+  try {
+    const res = await fetch(`${API_BASE}/api/live-rooms/${code.toUpperCase()}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) return { success: false };
+    return await res.json();
+  } catch {
+    return { success: false };
+  }
+};
 
 // ════════════════════════════════════════════════════════════
 //  CREATE ROOM (Interviewer)
@@ -363,21 +388,35 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
 const InterviewerLobby = ({ room, onStartSession, onBack }) => {
   const [copied, setCopied] = useState(false);
   const [reviveRequests, setReviveRequests] = useState([]);
+  const [candidateConnected, setCandidateConnected] = useState(room.status === 'active');
+  const [roomStatus, setRoomStatus] = useState(room.status);
 
   const copyCode = () => {
     navigator.clipboard.writeText(room.roomCode).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
-  // Poll for revive requests (mock — in production use WebSocket)
+  // Poll server for room status changes (candidate joining, etc.)
   useEffect(() => {
-    if (room.status !== 'active') return;
-    const id = setInterval(() => {
-      if (room.suspension?.reviveRequested && !reviveRequests.length) {
-        setReviveRequests([{ requestedAt: new Date(), message: 'Candidate is requesting session revival.' }]);
+    if (roomStatus === 'completed') return;
+    const id = setInterval(async () => {
+      const data = await getLiveRoom(room.roomCode);
+      if (data.success && data.room) {
+        const serverRoom = data.room;
+        if (serverRoom.status === 'active' && !candidateConnected) {
+          setCandidateConnected(true);
+          setRoomStatus('active');
+        }
+        if (serverRoom.status === 'completed') {
+          setRoomStatus('completed');
+        }
+        // Check for revive requests
+        if (serverRoom.suspension?.reviveRequested && !reviveRequests.length) {
+          setReviveRequests([{ requestedAt: new Date(), message: 'Candidate is requesting session revival.' }]);
+        }
       }
-    }, 3000);
+    }, 5000);
     return () => clearInterval(id);
-  }, [room]);
+  }, [room.roomCode, candidateConnected, roomStatus, reviveRequests.length]);
 
   return (
     <div className="room-lobby animate-fade-in-up">
@@ -437,6 +476,27 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
             </div>
           )}
 
+          {/* Candidate Connection Status */}
+          <div className="room-info-card" style={{ borderColor: candidateConnected ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.06)' }}>
+            <div className="room-info-label">Candidate Status</div>
+            <div className="room-info-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: candidateConnected ? '#22c55e' : '#6b7280',
+                boxShadow: candidateConnected ? '0 0 8px rgba(34,197,94,0.5)' : 'none',
+                animation: candidateConnected ? 'none' : 'pulse 2s infinite',
+              }} />
+              <span style={{ color: candidateConnected ? '#22c55e' : 'var(--text-dim)', fontWeight: 600, fontSize: '0.85rem' }}>
+                {candidateConnected ? '✓ Candidate Connected!' : 'Waiting for candidate to join…'}
+              </span>
+            </div>
+            {roomStatus === 'completed' && (
+              <div className="room-info-row" style={{ color: '#6366f1', fontWeight: 600, marginTop: '0.5rem' }}>
+                Session completed
+              </div>
+            )}
+          </div>
+
           {/* Revive Requests */}
           {reviveRequests.length > 0 && (
             <div className="room-revive-card">
@@ -444,6 +504,10 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
               <p>Candidate has been suspended and is requesting revival.</p>
               <div className="room-revive-actions">
                 <button id="approve-revival-btn" className="ip-btn-primary" onClick={() => {
+                  patchLiveRoom(room.roomCode, {
+                    status: 'active',
+                    suspension: { isSuspended: false, reviveRequested: false },
+                  }).catch(() => {});
                   room.suspension.isSuspended = false;
                   room.suspension.reviveRequested = false;
                   setReviveRequests([]);
@@ -483,8 +547,28 @@ const JoinRoom = ({ onJoined, onBack }) => {
         setJoining(false);
         return;
       }
+      const room = data.room;
+      // Validate room has questions
+      if (!room.assignedQuestions?.length && !room.domainGroups?.some(dg => dg.questions?.length)) {
+        setError('This room has no questions assigned. Please ask the interviewer to set up the room again.');
+        setJoining(false);
+        return;
+      }
+      // Check room status
+      if (room.status === 'completed') {
+        setError('This room session has already been completed.');
+        setJoining(false);
+        return;
+      }
+      if (room.status === 'expired') {
+        setError('This room has expired. Please ask the interviewer for a new room code.');
+        setJoining(false);
+        return;
+      }
+      // Mark room as active on the server
+      await patchLiveRoom(code, { status: 'active' });
       setJoining(false);
-      onJoined(data.room);
+      onJoined(room);
     } catch (err) {
       setError('Could not connect to server. Please try again.');
       setJoining(false);
@@ -557,8 +641,7 @@ const LiveSession = ({ room, onComplete }) => {
   const totalQuestions = allQuestions.length;
   const domainLabel = CATEGORIES.find(c => c.id === currentDomain?.domain)?.label || currentDomain?.domain || 'General';
 
-  // DEBUG — remove after fixing
-  console.log('[LiveSession]', { domainIdx, qIdx, totalDomains, domain: currentDomain?.domain, questionsCount: currentQuestions.length, q: q?.question || q?.text || null, submitted: !!answers[globalQIdx] });
+  // Session state is derived reactively — no debug logging needed
 
   // Derive submitted from answers — resets automatically when question changes
   const submitted = !!answers[globalQIdx];
@@ -573,6 +656,7 @@ const LiveSession = ({ room, onComplete }) => {
       setShowDomainTransition(true);
       setTimerStarted(false);
     } else {
+      patchLiveRoom(room.roomCode, { status: 'completed' }).catch(() => {});
       onComplete({ room, answers: Object.values(answers), violations, totalTime: domainGroups.reduce((s, dg) => s + (dg.timeMinutes || 10) * 60, 0) });
     }
   };
@@ -586,13 +670,35 @@ const LiveSession = ({ room, onComplete }) => {
   const handleViolation = useCallback((type, count) => {
     setViolations(v => [...v, { type, occurredAt: new Date() }]);
     if (count < tabLimit) setWarningShown(true);
-  }, [tabLimit]);
+    // Sync violation to server
+    patchLiveRoom(room.roomCode, {
+      violations: [...(room.violations || []), { type, occurredAt: new Date().toISOString() }],
+      tabSwitchCount: count,
+    }).catch(() => {});
+  }, [tabLimit, room.roomCode, room.violations]);
 
-  const handleSuspend = useCallback(() => { setIsSuspended(true); setWarningShown(false); }, []);
+  const handleSuspend = useCallback(() => {
+    setIsSuspended(true);
+    setWarningShown(false);
+    // Sync suspension to server
+    patchLiveRoom(room.roomCode, {
+      status: 'suspended',
+      suspension: { isSuspended: true, suspendedAt: new Date().toISOString(), reviveRequested: false },
+    }).catch(() => {});
+  }, [room.roomCode]);
 
   const saveAnswer = (ans) => {
     const gIdx = domainGroups.slice(0, domainIdx).reduce((s, dg) => s + dg.questions.length, 0) + qIdx;
-    setAnswers(prev => ({ ...prev, [gIdx]: { ...q, ...ans, _domain: currentDomain.domain, answeredAt: new Date() } }));
+    const answerEntry = { ...q, ...ans, _domain: currentDomain.domain, answeredAt: new Date() };
+    setAnswers(prev => ({ ...prev, [gIdx]: answerEntry }));
+    // Sync answer to server (fire-and-forget)
+    patchLiveRoom(room.roomCode, {
+      candidateAnswers: [...(room.candidateAnswers || []), {
+        questionType: ans.questionType || q.questionType,
+        score: ans.score || 0,
+        answeredAt: new Date().toISOString(),
+      }],
+    }).catch(() => {});
   };
 
   const next = () => {
@@ -608,7 +714,8 @@ const LiveSession = ({ room, onComplete }) => {
         setShowDomainTransition(true);
         setTimerStarted(false);
       } else {
-        // All done
+        // All done — mark room as completed on server
+        patchLiveRoom(room.roomCode, { status: 'completed' }).catch(() => {});
         setAnswers(prev => {
           onComplete({ room, answers: Object.values(prev), violations, totalTime: domainGroups.reduce((s, dg) => s + (dg.timeMinutes || 10) * 60, 0) });
           return prev;
