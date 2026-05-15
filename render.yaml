@@ -12,12 +12,12 @@ services:
         sync: false          # Set in Render dashboard → from MongoDB Atlas
       - key: JWT_SECRET
         sync: false          # Set in Render dashboard → any long random string
-      - key: AI_API_URL
-        sync: false          # Set in Render dashboard → https://api.deepseek.com/v1
-      - key: AI_API_KEY
-        sync: false          # Set in Render dashboard → your DeepSeek API key
+      - key: OLLAMA_API_URL
+        value: https://ollama.com
+      - key: OLLAMA_API_KEY
+        sync: false          # Set in Render dashboard → your Ollama cloud API key
       - key: AI_MODEL
-        value: deepseek-chat
+        value: gemma3:12b
       - key: CLIENT_URL
         sync: false          # Set in Render dashboard → your Vercel frontend URL
     healthCheckPath: /api/health
