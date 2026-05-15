@@ -219,7 +219,7 @@ const OLLAMA_URL = (process.env.OLLAMA_API_URL || '').trim();
 const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || '').trim();
 const OAI_URL    = (process.env.AI_API_URL || '').trim();
 const OAI_KEY    = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL   = (process.env.AI_MODEL || 'Meta-Llama-3.1-70B-Instruct').trim();
+const AI_MODEL   = (process.env.AI_MODEL || 'deepseek-chat').trim();
 
 // Use Ollama native format if OLLAMA_API_URL is set (and not overridden by AI_API_URL)
 const USE_OLLAMA = !!OLLAMA_URL && !OAI_URL;
