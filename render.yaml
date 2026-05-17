@@ -17,7 +17,7 @@ services:
       - key: AI_API_KEY
         sync: false          # Set in Render dashboard → your Ollama cloud API key
       - key: AI_MODEL
-        value: gemma3:12b
+        value: openai/gpt-oss-120b
       - key: CLIENT_URL
         sync: false          # Set in Render dashboard → your Vercel frontend URL
     healthCheckPath: /api/health
