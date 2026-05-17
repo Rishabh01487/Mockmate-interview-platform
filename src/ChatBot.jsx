@@ -58,7 +58,7 @@ function getOfflineResponse(input) {
   for (const entry of OFFLINE_KB) {
     if (entry.pattern.test(input)) return entry.answer;
   }
-  return "⚡ Verge1.o is in offline mode. I can only answer basic CS questions right now.\n\nTo unlock full AI capabilities:\n1. Open a terminal\n2. Navigate to your Ollama folder on F:\n3. Run: ollama serve\n4. In another terminal: ollama run llama3\n\nOnce Ollama is running, I'll connect automatically.";
+  return "⚡ Verge1.o is in offline mode.";
 }
 
 export default function ChatBot() {
@@ -165,11 +165,11 @@ export default function ChatBot() {
       >
         {open ? (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         ) : (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
         )}
         {!open && unread > 0 && <span className="cb-unread">{unread}</span>}
@@ -184,7 +184,7 @@ export default function ChatBot() {
             <div className="cb-header-info">
               <div className="cb-avatar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
                 </svg>
               </div>
               <div>
@@ -197,7 +197,7 @@ export default function ChatBot() {
             </div>
             <button className="cb-close" id="chatbot-close" onClick={() => setOpen(false)} aria-label="Close chat">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
@@ -209,7 +209,7 @@ export default function ChatBot() {
                 {msg.from === 'bot' && (
                   <div className="cb-msg-avatar">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                      <path d="M12 2L2 7l10 5 10-5-10-5z" />
                     </svg>
                   </div>
                 )}
@@ -222,7 +222,7 @@ export default function ChatBot() {
               <div className="cb-msg cb-msg--bot">
                 <div className="cb-msg-avatar">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
                   </svg>
                 </div>
                 <div className="cb-msg-bubble cb-typing">
@@ -265,7 +265,7 @@ export default function ChatBot() {
               aria-label="Send message"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
               </svg>
             </button>
           </div>

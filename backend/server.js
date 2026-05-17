@@ -219,7 +219,7 @@ const OLLAMA_URL = (process.env.OLLAMA_API_URL || '').trim();
 const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || '').trim();
 const OAI_URL    = (process.env.AI_API_URL || '').trim();
 const OAI_KEY    = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL   = (process.env.AI_MODEL || 'deepseek-chat').trim();
+const AI_MODEL   = (process.env.AI_MODEL || 'gemma3:12b').trim();
 
 // Use Ollama native format if OLLAMA_API_URL is set (and not overridden by AI_API_URL)
 const USE_OLLAMA = !!OLLAMA_URL && !OAI_URL;
@@ -228,16 +228,23 @@ const AI_BASE_URL = USE_OLLAMA
   : (OAI_URL || 'http://localhost:11434/v1').replace(/\/$/, '');
 const AI_KEY = USE_OLLAMA ? OLLAMA_KEY : OAI_KEY;
 
+console.log(`✓ AI Provider: ${USE_OLLAMA ? 'Ollama Native' : 'OpenAI-Compatible'} → ${AI_BASE_URL} (model: ${AI_MODEL})`);
+
 // Health check — works for both Ollama and OpenAI providers
 app.get('/api/ai/health', async (req, res) => {
   try {
     const checkUrl = USE_OLLAMA ? `${AI_BASE_URL}/api/tags` : `${AI_BASE_URL}/models`;
     const check = await fetch(checkUrl, {
       headers: { 'Authorization': `Bearer ${AI_KEY}`, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(6000)
+      signal: AbortSignal.timeout(8000)
     });
+    if (!check.ok) {
+      const errText = await check.text().catch(() => 'Unknown');
+      console.warn(`[AI Health] ${check.status}: ${errText.slice(0, 200)}`);
+    }
     res.json({ status: check.ok ? 'online' : 'error', online: check.ok, provider: AI_BASE_URL });
   } catch (err) {
+    console.warn('[AI Health] Offline:', err.message);
     res.json({ status: 'offline', online: false, error: err.message });
   }
 });
@@ -246,33 +253,45 @@ app.get('/api/ai/health', async (req, res) => {
 app.post('/api/ai/chat', async (req, res) => {
   try {
     const { messages, model, temperature = 0.7 } = req.body;
+    const useModel = model || AI_MODEL;
     let response;
 
     if (USE_OLLAMA) {
       // Ollama native format: /api/chat
+      console.log(`[AI Chat] Ollama → model=${useModel}, msgs=${messages?.length}`);
       response = await fetch(`${AI_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
-        body: JSON.stringify({ model: model || 'gemma3:12b', messages, stream: false, options: { temperature } }),
-        signal: AbortSignal.timeout(60000)
+        body: JSON.stringify({ model: useModel, messages, stream: false, options: { temperature } }),
+        signal: AbortSignal.timeout(120000)
       });
-      if (!response.ok) return res.status(response.status).json({ error: await response.text() });
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error(`[AI Chat] Ollama error ${response.status}: ${errBody.slice(0, 500)}`);
+        return res.status(response.status).json({ error: errBody });
+      }
       const data = await response.json();
       return res.json({ message: data.message || { content: '', role: 'assistant' } });
     } else {
       // OpenAI-compatible format: /v1/chat/completions
+      console.log(`[AI Chat] OpenAI-compat → model=${useModel}, msgs=${messages?.length}`);
       response = await fetch(`${AI_BASE_URL}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
-        body: JSON.stringify({ model: model || AI_MODEL, messages, temperature, max_tokens: 4096, stream: false }),
-        signal: AbortSignal.timeout(60000)
+        body: JSON.stringify({ model: useModel, messages, temperature, max_tokens: 4096, stream: false }),
+        signal: AbortSignal.timeout(120000)
       });
-      if (!response.ok) return res.status(response.status).json({ error: await response.text() });
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error(`[AI Chat] OpenAI-compat error ${response.status}: ${errBody.slice(0, 500)}`);
+        return res.status(response.status).json({ error: errBody });
+      }
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || '';
       return res.json({ message: { content, role: 'assistant' } });
     }
   } catch (err) {
+    console.error('[AI Chat] Exception:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
