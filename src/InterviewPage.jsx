@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { CATEGORIES, DIFFICULTIES, getRandomQuestions } from './data/questions';
+import { CATEGORIES, DIFFICULTIES, getRandomQuestions, questions } from './data/questions';
 import MCQQuestion from './components/MCQQuestion';
 import CodeEditor from './components/CodeEditor';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
+import './components/AnalyticsDashboard.css';
+import { generateQuestions, isOllamaOnline } from './services/ollamaService';
 
 // ============================================================
 // Shared tiny SVG icons
@@ -96,7 +99,7 @@ const CategorySelector = ({ selected, onSelect, onNext }) => (
 );
 
 // ============================================================
-// Step 2: Difficulty Selector
+// Step 2: Difficulty Selector (with AI toggle)
 // ============================================================
 const DIFF_DESCRIPTIONS = {
   Easy: 'Foundational concepts and definitions. Good for warm-up.',
@@ -104,11 +107,20 @@ const DIFF_DESCRIPTIONS = {
   Hard: 'Advanced topics, edge cases, and design questions.',
 };
 
-const DifficultySelector = ({ selected, onSelect, onBack, onStart }) => (
+const Q_TYPES = [
+  { id: 'all', label: 'All Types', icon: '🎯' },
+  { id: 'mcq', label: 'MCQ', icon: '☑️' },
+  { id: 'text', label: 'Theory', icon: '📝' },
+  { id: 'coding', label: 'Coding', icon: '💻' },
+];
+
+const Q_COUNTS = [10, 20, 40, 50, 100, 150];
+
+const DifficultySelector = ({ selected, onSelect, onBack, onStart, useAI, onToggleAI, aiLoading, questionType, onTypeSelect, questionCount, onCountSelect }) => (
   <div className="ip-step animate-fade-in-up">
     <div className="ip-step-header">
-      <h2 className="ip-step-title">Select Difficulty</h2>
-      <p className="ip-step-sub">Choose a level that matches your preparation</p>
+      <h2 className="ip-step-title">Select Difficulty & Type</h2>
+      <p className="ip-step-sub">Choose difficulty level and question format</p>
     </div>
     <div className="ip-diff-list">
       {DIFFICULTIES.map(diff => (
@@ -127,10 +139,81 @@ const DifficultySelector = ({ selected, onSelect, onBack, onStart }) => (
         </button>
       ))}
     </div>
+
+    {/* Question Type Selector */}
+    <div style={{ marginTop: '1.5rem' }}>
+      <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>Question Format</div>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        {Q_TYPES.map(t => (
+          <button
+            key={t.id}
+            id={`qtype-${t.id}`}
+            onClick={() => onTypeSelect(t.id)}
+            style={{
+              padding: '0.6rem 1.1rem', borderRadius: 'var(--radius-md)',
+              border: `1px solid ${questionType === t.id ? 'var(--text-primary)' : 'var(--border-primary)'}`,
+              background: questionType === t.id ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+              color: questionType === t.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', gap: '6px',
+            }}
+          >
+            <span>{t.icon}</span> {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* Question Count Selector */}
+    <div style={{ marginTop: '1rem' }}>
+      <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>Number of Questions</div>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        {Q_COUNTS.map(n => (
+          <button
+            key={n}
+            id={`qcount-${n}`}
+            onClick={() => onCountSelect(n)}
+            style={{
+              padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)',
+              border: `1px solid ${questionCount === n ? 'var(--text-primary)' : 'var(--border-primary)'}`,
+              background: questionCount === n ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+              color: questionCount === n ? 'var(--text-primary)' : 'var(--text-secondary)',
+              fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+              minWidth: 50, textAlign: 'center',
+            }}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* AI Question Generation Toggle */}
+    <div style={{ marginTop: '1rem', padding: '1rem 1.25rem', background: 'var(--bg-surface)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>⚡ AI-Generated Questions</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Verge1.o generates unique questions using AI</div>
+        </div>
+      </div>
+      <button
+        id="ai-toggle-btn"
+        onClick={onToggleAI}
+        style={{
+          padding: '0.4rem 1rem', borderRadius: 'var(--radius-full)', border: 'none',
+          background: useAI ? '#6366f1' : 'var(--bg-elevated)', color: useAI ? '#fff' : 'var(--text-muted)',
+          fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+        }}
+      >
+        {useAI ? '✓ AI Enabled' : 'Enable AI'}
+      </button>
+    </div>
+
     <div className="ip-step-footer ip-step-footer--split">
       <button className="ip-btn-ghost" id="diff-back-btn" onClick={onBack}>{Icons.back} Back</button>
-      <button className="ip-btn-primary" id="diff-start-btn" onClick={onStart} disabled={!selected}>
-        Begin Session {Icons.next}
+      <button className="ip-btn-primary" id="diff-start-btn" onClick={onStart} disabled={!selected || aiLoading}>
+        {aiLoading ? 'Generating Questions…' : <>Begin Session {Icons.next}</>}
       </button>
     </div>
   </div>
@@ -405,53 +488,70 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
 };
 
 // ============================================================
-// Summary Screen
+// Summary Screen (with full Analytics Dashboard)
 // ============================================================
 const SummaryScreen = ({ responses, category, difficulty, onRestart, onHome }) => {
   const catLabel = CATEGORIES.find(c => c.id === category)?.label || category;
   const total = responses.length;
   const totalScore = responses.reduce((s, r) => s + (r.score || 0), 0);
   const maxScore = total * 10;
-  const pct = Math.round((totalScore / maxScore) * 100);
+
+  // Build domainResults for AnalyticsDashboard
+  const correctAnswers = responses.filter(r => {
+    if (r.questionType === 'mcq') return r.isCorrect === true;
+    if (r.questionType === 'coding') return (r.score || 0) >= 7;
+    return (r.score || 0) >= 5;
+  }).length;
+
+  const domainResults = [{
+    domain: category,
+    questions: responses.map(r => ({
+      question: r.question,
+      answer: r.answer || r.code || '',
+      score: (r.score || 0) * 10,
+      isCorrect: r.questionType === 'mcq' ? r.isCorrect === true : (r.score || 0) >= 5,
+      difficulty: r.difficulty || difficulty,
+      timeSpent: 0
+    })),
+    totalScore: total > 0 ? Math.round((correctAnswers / total) * 100) : 0,
+    totalQuestions: total,
+    correctAnswers,
+    timeTaken: 0,
+    timeAllotted: 0
+  }];
 
   return (
     <div className="ip-summary animate-fade-in-up">
       <div className="ip-summary-header">
         <div className="ip-summary-badge">Session Complete</div>
         <h2 className="ip-summary-title">{catLabel} · {difficulty}</h2>
-        <div className="ip-summary-score-ring">
-          <span className="ip-summary-score-val">{pct}%</span>
-          <span className="ip-summary-score-sub">Overall Score</span>
-        </div>
-        <div className="ip-summary-stats">
-          <div className="ip-summary-stat">
-            <span className="ip-ss-val">{total}</span>
-            <span className="ip-ss-label">Questions</span>
-          </div>
-          <div className="ip-summary-stat">
-            <span className="ip-ss-val">{totalScore}</span>
-            <span className="ip-ss-label">Points Earned</span>
-          </div>
-          <div className="ip-summary-stat">
-            <span className="ip-ss-val">{maxScore}</span>
-            <span className="ip-ss-label">Max Points</span>
-          </div>
-        </div>
       </div>
 
-      <div className="ip-summary-responses">
+      {/* Full Analytics Dashboard */}
+      <AnalyticsDashboard
+        domainResults={domainResults}
+        totalTime={0}
+        candidateName="Your"
+      />
+
+      {/* Per-Question Breakdown */}
+      <div className="ip-summary-responses" style={{ marginTop: '1.5rem' }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Question-by-Question Review</div>
         {responses.map((r, i) => (
           <div key={i} className="ip-summary-item">
             <div className="ip-summary-item-header">
               <span className="ip-summary-item-num">Q{i + 1}</span>
-              <span className={`ip-diff-badge ip-diff-badge--${r.difficulty.toLowerCase()}`}>{r.difficulty}</span>
+              <span className={`ip-diff-badge ip-diff-badge--${(r.difficulty || difficulty).toLowerCase()}`}>{r.difficulty || difficulty}</span>
+              <span className={`ce-type-badge ce-type-${r.questionType || 'text'}`} style={{ fontSize: '0.65rem' }}>
+                {{ text: 'Theory', mcq: 'MCQ', coding: 'Code' }[r.questionType] || 'Theory'}
+              </span>
               <div className="ip-summary-item-score-bar">
                 <div className="ip-summary-item-score-fill" style={{ width: `${(r.score / 10) * 100}%` }}></div>
               </div>
               <span className="ip-summary-item-score">{r.score}/10</span>
             </div>
             <p className="ip-summary-item-q">{r.question}</p>
-            {r.answer && r.answer !== '[No answer — time expired]' && (
+            {r.answer && r.answer !== '[No answer — time expired]' && r.answer !== '[Time expired]' && (
               <p className="ip-summary-item-a"><strong>You:</strong> {r.answer.slice(0, 200)}{r.answer.length > 200 ? '…' : ''}</p>
             )}
           </div>
@@ -475,12 +575,81 @@ const InterviewPage = ({ onGoHome }) => {
   const [difficulty, setDifficulty] = useState('');
   const [sessionQuestions, setSessionQuestions] = useState([]);
   const [responses, setResponses] = useState([]);
+  const [useAI, setUseAI] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [questionType, setQuestionType] = useState('all');
+  const [questionCount, setQuestionCount] = useState(20);
 
-  const startSession = () => {
-    const qs = getRandomQuestions(category, 5, difficulty);
-    if (!qs.length) return;
-    setSessionQuestions(qs);
+  const startSession = async () => {
+    setAiLoading(true);
+
+    // Map local questionType 'voice' → 'text' for filtering purposes
+    // Local bank has: 'voice' (theory) and 'coding' — NO 'mcq' questions
+    const typeMap = { voice: 'text', text: 'text', mcq: 'mcq', coding: 'coding' };
+
+    // Step 1: Check local question pool from selected domain
+    const rawPool = (questions[category] || []).sort(() => Math.random() - 0.5);
+    let localQs = rawPool.map(q => ({ ...q, questionType: typeMap[q.questionType] || 'text' }));
+    if (questionType !== 'all') {
+      localQs = localQs.filter(q => q.questionType === questionType);
+    }
+    if (difficulty) {
+      localQs = localQs.filter(q => q.difficulty === difficulty);
+    }
+
+    // Step 2: If local is enough and AI not toggled, use local
+    if (localQs.length >= questionCount && !useAI) {
+      setSessionQuestions(localQs.slice(0, questionCount));
+      setStep('session');
+      setAiLoading(false);
+      return;
+    }
+
+    // Step 3: Need AI for more questions (MCQ has ZERO local questions)
+    const needed = Math.max(0, questionCount - localQs.length);
+    if (needed > 0 || useAI) {
+      try {
+        const online = await isOllamaOnline();
+        if (!online) throw new Error('AI backend is offline');
+        const generateCount = useAI ? questionCount : needed;
+        const batchSize = 10;
+        const batches = Math.ceil(generateCount / batchSize);
+        let aiQs = [];
+        for (let i = 0; i < batches; i++) {
+          const remaining = generateCount - aiQs.length;
+          const count = Math.min(batchSize, remaining);
+          const generated = await generateQuestions(category, count, difficulty, questionType);
+          aiQs = [...aiQs, ...generated];
+          if (aiQs.length >= generateCount) break;
+        }
+        if (useAI) {
+          // AI-only mode: use only AI questions
+          localQs = aiQs;
+        } else {
+          // Supplement local with AI
+          localQs = [...localQs, ...aiQs];
+        }
+      } catch (err) {
+        console.warn('[Practice] AI generation error:', err.message);
+        // If MCQ was selected and AI failed, there are no local MCQs
+        if (questionType === 'mcq' && localQs.length === 0) {
+          alert('MCQ questions require AI generation. Please make sure Ollama is running (ollama serve) and try again.');
+          setAiLoading(false);
+          return;
+        }
+      }
+    }
+
+    // Step 4: Start session with available questions
+    const finalQs = localQs.slice(0, questionCount);
+    if (!finalQs.length) {
+      alert('No questions available. Please try a different combination or enable AI.');
+      setAiLoading(false);
+      return;
+    }
+    setSessionQuestions(finalQs);
     setStep('session');
+    setAiLoading(false);
   };
 
   const handleFinish = (resp) => {
@@ -494,6 +663,9 @@ const InterviewPage = ({ onGoHome }) => {
     setDifficulty('');
     setResponses([]);
     setSessionQuestions([]);
+    setUseAI(false);
+    setQuestionType('all');
+    setQuestionCount(20);
   };
 
   return (
@@ -528,6 +700,13 @@ const InterviewPage = ({ onGoHome }) => {
             onSelect={setDifficulty}
             onBack={() => setStep('category')}
             onStart={startSession}
+            useAI={useAI}
+            onToggleAI={() => setUseAI(v => !v)}
+            aiLoading={aiLoading}
+            questionType={questionType}
+            onTypeSelect={setQuestionType}
+            questionCount={questionCount}
+            onCountSelect={setQuestionCount}
           />
         )}
         {step === 'session' && sessionQuestions.length > 0 && (

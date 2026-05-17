@@ -67,10 +67,14 @@ export async function generateQuestions(domain, count = 10, difficulty = null, t
   const domainLabel = domainNames[domain] || domain;
   const diffClause = difficulty ? ` All questions must be ${difficulty} difficulty.` : ' Include a mix of Easy, Medium, and Hard questions.';
   
-  let typeClause = '- Vary question types: some coding, some MCQ, some verbal/conceptual.';
-  if (typeFilter === 'mcq') typeClause = '- CRITICAL: ALL questions MUST be Multiple Choice Questions (questionType: "mcq"). Do NOT generate coding or text questions.';
-  if (typeFilter === 'text') typeClause = '- CRITICAL: ALL questions MUST be verbal/conceptual theory questions (questionType: "text"). Do NOT generate mcq or coding questions.';
-  if (typeFilter === 'coding') typeClause = '- CRITICAL: ALL questions MUST be algorithmic coding problems (questionType: "coding"). Do NOT generate mcq or text questions.';
+  let typeClause = `- CRITICAL MIX REQUIREMENT: You MUST generate EXACTLY this mix of question types:
+    * ${Math.max(1, Math.floor(count * 0.4))} questions with questionType: "mcq" (multiple choice with 4 options and correctOptionIndex)
+    * ${Math.max(1, Math.floor(count * 0.4))} questions with questionType: "text" (theory/conceptual with expectedPoints)
+    * ${Math.max(1, count - Math.floor(count * 0.4) * 2)} questions with questionType: "coding" (with problemStatement, constraints, examples)
+    DO NOT make all questions the same type. This mix is mandatory.`;
+  if (typeFilter === 'mcq') typeClause = '- CRITICAL: ALL questions MUST be Multiple Choice Questions (questionType: "mcq"). Each MUST have "options" array with 4 objects [{text:"A"},{text:"B"},{text:"C"},{text:"D"}] and "correctOptionIndex" (0-3). Do NOT generate coding or text questions.';
+  if (typeFilter === 'text') typeClause = '- CRITICAL: ALL questions MUST be verbal/conceptual theory questions (questionType: "text"). Each MUST have "expectedPoints" array. Do NOT generate mcq or coding questions.';
+  if (typeFilter === 'coding') typeClause = '- CRITICAL: ALL questions MUST be algorithmic coding problems (questionType: "coding"). Each MUST have "problemStatement", "constraints", "examples". Do NOT generate mcq or text questions.';
 
   const prompt = `You are an expert CS interview question generator. Generate exactly ${count} unique technical interview questions about ${domainLabel}.${diffClause}
 
