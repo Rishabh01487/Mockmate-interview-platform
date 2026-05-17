@@ -5,6 +5,7 @@ import CodeEditor from './components/CodeEditor';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import './components/AnalyticsDashboard.css';
 import { generateQuestions, isOllamaOnline } from './services/ollamaService';
+import { API_BASE } from './config/api.js';
 
 // ============================================================
 // Shared tiny SVG icons
@@ -655,6 +656,27 @@ const InterviewPage = ({ onGoHome }) => {
   const handleFinish = (resp) => {
     setResponses(resp);
     setStep('summary');
+
+    // Log candidate answers for AI training (non-blocking)
+    const totalScore = resp.reduce((s, r) => s + (r.score || 0), 0);
+    const maxScore = resp.length * 10;
+    fetch(`${API_BASE}/api/training/answers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: category,
+        difficulty,
+        overallScore: maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0,
+        answers: resp.map(r => ({
+          question: r.question,
+          answer: r.answer || r.code || '',
+          score: r.score,
+          isCorrect: r.isCorrect ?? (r.score >= 5),
+          questionType: r.questionType,
+          difficulty: r.difficulty
+        }))
+      })
+    }).catch(() => {});
   };
 
   const handleRestart = () => {

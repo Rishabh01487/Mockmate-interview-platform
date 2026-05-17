@@ -16,6 +16,10 @@ const Feedback         = require('./models/FeedbackSchema');
 const Analytics        = require('./models/AnalyticsSchema');
 const InterviewRoom    = require('./models/InterviewRoomSchema');
 const CodingSubmission = require('./models/CodingSubmissionSchema');
+const TrainingData     = require('./models/TrainingDataSchema');
+
+// ── Services ─────────────────────────────────────────────────
+const { logQuestionGeneration, logCandidateAnswers, exportToFDrive, getTrainingStats } = require('./services/trainingCollector');
 
 // ── Controllers ──────────────────────────────────────────────
 const { register, login, updateProfile, changePassword } = require('./controller/authController');
@@ -254,10 +258,9 @@ app.post('/api/ai/chat', async (req, res) => {
   try {
     const { messages, model, temperature = 0.7 } = req.body;
     const useModel = model || AI_MODEL;
-    let response;
+    let response, aiContent = '';
 
     if (USE_OLLAMA) {
-      // Ollama native format: /api/chat
       console.log(`[AI Chat] Ollama → model=${useModel}, msgs=${messages?.length}`);
       response = await fetch(`${AI_BASE_URL}/api/chat`, {
         method: 'POST',
@@ -271,9 +274,9 @@ app.post('/api/ai/chat', async (req, res) => {
         return res.status(response.status).json({ error: errBody });
       }
       const data = await response.json();
-      return res.json({ message: data.message || { content: '', role: 'assistant' } });
+      aiContent = data.message?.content || '';
+      res.json({ message: data.message || { content: '', role: 'assistant' } });
     } else {
-      // OpenAI-compatible format: /v1/chat/completions
       console.log(`[AI Chat] OpenAI-compat → model=${useModel}, msgs=${messages?.length}`);
       response = await fetch(`${AI_BASE_URL}/chat/completions`, {
         method: 'POST',
@@ -287,11 +290,65 @@ app.post('/api/ai/chat', async (req, res) => {
         return res.status(response.status).json({ error: errBody });
       }
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '';
-      return res.json({ message: { content, role: 'assistant' } });
+      aiContent = data.choices?.[0]?.message?.content || '';
+      res.json({ message: { content: aiContent, role: 'assistant' } });
     }
+
+    // ── Log to training data (non-blocking) ──
+    const userMsg = messages?.find(m => m.role === 'user')?.content || '';
+    const domainMatch = userMsg.match(/about\s+(.+?)\./i);
+    const diffMatch = userMsg.match(/(Easy|Medium|Hard)/i);
+    const countMatch = userMsg.match(/exactly\s+(\d+)/i);
+    let isValid = false;
+    try { isValid = Array.isArray(JSON.parse(aiContent.replace(/^```[\s\S]*?\n/, '').replace(/\n```$/, ''))); } catch {}
+    logQuestionGeneration({
+      prompt: userMsg.slice(0, 2000),
+      response: aiContent.slice(0, 10000),
+      domain: domainMatch?.[1]?.toLowerCase()?.replace(/[^a-z]/g, '') || 'unknown',
+      difficulty: diffMatch?.[1] || null,
+      questionType: userMsg.includes('mcq') ? 'mcq' : userMsg.includes('coding') ? 'coding' : 'text',
+      questionCount: parseInt(countMatch?.[1]) || 0,
+      modelUsed: useModel,
+      isValidJSON: isValid
+    }).catch(() => {});
+
   } catch (err) {
     console.error('[AI Chat] Exception:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  Training Data API — Stats, Export, Log Answers
+// ════════════════════════════════════════════════════════════
+
+// Get training data statistics
+app.get('/api/training/stats', async (req, res) => {
+  try {
+    const stats = await getTrainingStats();
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Export training data to F: drive
+app.post('/api/training/export', async (req, res) => {
+  try {
+    const result = await exportToFDrive(req.body.path || 'F:\\MockMate-AI-Training');
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Log candidate answers for training
+app.post('/api/training/answers', async (req, res) => {
+  try {
+    const { domain, difficulty, answers, overallScore } = req.body;
+    await logCandidateAnswers({ domain, difficulty, answers, overallScore });
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
