@@ -4,94 +4,99 @@ const path = require('path');
 
 // ════════════════════════════════════════════════════════════
 //  Training Data Collector
-//  Automatically captures AI interactions for fine-tuning
+//  Captures EACH question individually for fine-tuning
 // ════════════════════════════════════════════════════════════
 
 /**
- * Log an AI question generation event as training data
+ * Log AI question generation — splits into INDIVIDUAL question samples
  */
 async function logQuestionGeneration({ prompt, response, domain, difficulty, questionType, questionCount, modelUsed, isValidJSON }) {
   try {
-    await TrainingData.create({
-      instruction: `Generate ${questionCount} ${difficulty || 'mixed'} difficulty ${questionType || 'mixed'} interview questions about ${domain}.`,
-      input: prompt,
-      output: response,
-      domain,
-      difficulty,
-      questionType,
-      questionCount,
-      modelUsed,
-      isValidJSON,
-      source: 'practice'
-    });
-    console.log(`[Training] Logged ${questionCount} ${domain} questions for training`);
+    // Try to parse the AI response into individual questions
+    let questions = [];
+    try {
+      const cleaned = response.replace(/^```[\s\S]*?\n/, '').replace(/\n```$/, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed)) questions = parsed;
+    } catch {}
+
+    if (questions.length > 0) {
+      // Log EACH question as a separate training sample
+      const docs = questions.map((q, i) => ({
+        instruction: `Generate a ${difficulty || 'medium'} difficulty ${questionType || 'theory'} interview question about ${domain}.`,
+        input: `Domain: ${domain}, Difficulty: ${difficulty || 'medium'}, Type: ${questionType || 'theory'}, Question ${i + 1}`,
+        output: JSON.stringify(q),
+        domain,
+        difficulty,
+        questionType,
+        questionCount: 1,
+        modelUsed,
+        isValidJSON: true,
+        source: 'practice-question'
+      }));
+      await TrainingData.insertMany(docs);
+      console.log(`[Training] Logged ${docs.length} individual questions for ${domain}`);
+    } else {
+      // Fallback: log the entire batch as one sample
+      await TrainingData.create({
+        instruction: `Generate ${questionCount} ${difficulty || 'mixed'} difficulty ${questionType || 'mixed'} interview questions about ${domain}.`,
+        input: prompt,
+        output: response,
+        domain, difficulty, questionType, questionCount, modelUsed, isValidJSON,
+        source: 'practice-batch'
+      });
+      console.log(`[Training] Logged 1 batch sample for ${domain}`);
+    }
   } catch (err) {
     console.warn('[Training] Failed to log:', err.message);
   }
 }
 
 /**
- * Log candidate answers for training the evaluation model
+ * Log candidate answers — EACH answer as individual sample
  */
 async function logCandidateAnswers({ domain, difficulty, answers, overallScore }) {
   try {
-    await TrainingData.create({
-      instruction: `Evaluate candidate answers for ${domain} interview questions.`,
-      input: JSON.stringify(answers.map(a => ({ question: a.question, answer: a.answer }))),
-      output: JSON.stringify(answers.map(a => ({ score: a.score, isCorrect: a.isCorrect, feedback: a.feedback }))),
+    const docs = answers.map(a => ({
+      instruction: `Evaluate this ${domain} interview answer.`,
+      input: JSON.stringify({ question: a.question, answer: a.answer }),
+      output: JSON.stringify({ score: a.score, isCorrect: a.isCorrect, feedback: a.feedback || '' }),
       domain,
-      difficulty,
-      source: 'candidate-eval',
-      candidateScore: overallScore,
-      candidateAnswers: answers,
-      questionCount: answers.length
-    });
-    console.log(`[Training] Logged ${answers.length} candidate answers (score: ${overallScore}%)`);
+      difficulty: a.difficulty || difficulty,
+      questionType: a.questionType,
+      source: 'candidate-answer',
+      candidateScore: a.score,
+      questionCount: 1,
+      candidateAnswers: [a]
+    }));
+    await TrainingData.insertMany(docs);
+    console.log(`[Training] Logged ${docs.length} individual answers (avg score: ${overallScore}%)`);
   } catch (err) {
     console.warn('[Training] Failed to log answers:', err.message);
   }
 }
 
 /**
- * Export training data to F: drive in JSONL format (for fine-tuning)
- * Run periodically or manually via API
+ * Export training data to F: drive in JSONL format
  */
 async function exportToFDrive(exportPath = 'F:\\MockMate-AI-Training') {
   try {
-    // Create export directory
-    if (!fs.existsSync(exportPath)) {
-      fs.mkdirSync(exportPath, { recursive: true });
-    }
+    if (!fs.existsSync(exportPath)) fs.mkdirSync(exportPath, { recursive: true });
 
-    // Get unexported data
     const data = await TrainingData.find({ exported: false }).lean();
-    if (!data.length) {
-      console.log('[Training] No new data to export');
-      return { exported: 0 };
-    }
+    if (!data.length) return { exported: 0 };
 
-    // Generate timestamped filename
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `training_${timestamp}.jsonl`;
-    const filepath = path.join(exportPath, filename);
+    const filepath = path.join(exportPath, `training_${timestamp}.jsonl`);
 
-    // Convert to JSONL (Alpaca format — standard for fine-tuning)
     const jsonl = data.map(d => JSON.stringify({
-      instruction: d.instruction,
-      input: d.input,
-      output: d.output,
-      domain: d.domain,
-      difficulty: d.difficulty,
-      questionType: d.questionType
+      instruction: d.instruction, input: d.input, output: d.output,
+      domain: d.domain, difficulty: d.difficulty, questionType: d.questionType
     })).join('\n');
 
     fs.writeFileSync(filepath, jsonl, 'utf8');
+    await TrainingData.updateMany({ _id: { $in: data.map(d => d._id) } }, { exported: true });
 
-    // Mark as exported
-    const ids = data.map(d => d._id);
-    await TrainingData.updateMany({ _id: { $in: ids } }, { exported: true });
-
-    // Also maintain a cumulative file
     const cumulativePath = path.join(exportPath, 'all_training_data.jsonl');
     fs.appendFileSync(cumulativePath, jsonl + '\n', 'utf8');
 
@@ -122,7 +127,7 @@ async function getTrainingStats() {
     unexported,
     byDomain: byDomain.reduce((acc, d) => { acc[d._id] = d.count; return acc; }, {}),
     bySource: bySource.reduce((acc, d) => { acc[d._id] = d.count; return acc; }, {}),
-    estimatedFinetuneReady: total >= 500 ? 'Ready' : `Need ${500 - total} more samples`
+    estimatedFinetuneReady: total >= 500 ? '✅ Ready!' : `Need ${500 - total} more`
   };
 }
 

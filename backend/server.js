@@ -35,10 +35,12 @@ const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
   /\.vercel\.app$/,  // allow all *.vercel.app subdomains
+  /\.github\.io$/,   // allow GitHub Pages (training dashboard)
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
+    // Allow file:// origins (null) for local training dashboard
     if (!origin) return callback(null, true);
     const allowed = allowedOrigins.some(o =>
       o instanceof RegExp ? o.test(origin) : o === origin
@@ -54,6 +56,24 @@ app.use(cors({
 app.options('*', cors());
 
 app.use(express.json({ limit: '50kb' }));
+
+// Serve training dashboard at /training (avoids CORS issues)
+const path = require('path');
+app.get('/training', (req, res) => {
+  const dashPath = path.resolve(__dirname, '../../MockMate-AI-Training/dashboard.html');
+  const fs = require('fs');
+  if (fs.existsSync(dashPath)) {
+    let html = fs.readFileSync(dashPath, 'utf8');
+    // Override API_URL to same origin so no CORS needed
+    html = html.replace(
+      "let API_URL = localStorage.getItem('mockmate_api_url') || DEFAULT_URL;",
+      "let API_URL = window.location.origin;"
+    );
+    res.type('html').send(html);
+  } else {
+    res.status(404).send('Training dashboard not found. Place dashboard.html at D:\\MockMate-AI-Training\\');
+  }
+});
 
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, _res, next) => { console.log(`${req.method} ${req.path}`); next(); });
@@ -349,6 +369,105 @@ app.post('/api/training/answers', async (req, res) => {
     await logCandidateAnswers({ domain, difficulty, answers, overallScore });
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Seed training data (generates 600+ samples)
+app.post('/api/training/seed', async (req, res) => {
+  try {
+    const before = await TrainingData.countDocuments();
+    const DOMAINS = {
+      dsa: { label: 'Data Structures & Algorithms', topics: ['arrays','linked-lists','stacks','queues','trees','graphs','dynamic-programming','sorting','searching','hash-maps','heaps','tries','recursion','backtracking','greedy','binary-search'],
+        questions: [
+          {q:'What is a binary search tree?',d:'Easy'},{q:'Explain quicksort time complexity.',d:'Medium'},{q:'What is dynamic programming?',d:'Medium'},
+          {q:'How does a hash map handle collisions?',d:'Medium'},{q:'BFS vs DFS differences?',d:'Easy'},{q:'Explain Dijkstra algorithm.',d:'Hard'},
+          {q:'What is a heap?',d:'Medium'},{q:'Compare AVL and Red-Black trees.',d:'Hard'},{q:'What is amortized analysis?',d:'Hard'},
+          {q:'What is a trie?',d:'Medium'},{q:'Explain two-pointer technique.',d:'Easy'},{q:'What is sliding window?',d:'Medium'},
+          {q:'What is topological sorting?',d:'Medium'},{q:'Compare merge sort and quick sort.',d:'Medium'},{q:'What is a segment tree?',d:'Hard'},
+        ]},
+      os: { label: 'Operating Systems', topics: ['processes','threads','scheduling','memory','virtual-memory','deadlocks','file-systems','synchronization','paging','IPC'],
+        questions: [
+          {q:'Process vs thread difference?',d:'Easy'},{q:'Explain CPU scheduling algorithms.',d:'Medium'},{q:'What is a deadlock?',d:'Medium'},
+          {q:'Explain virtual memory and paging.',d:'Medium'},{q:'What is thrashing?',d:'Hard'},{q:'Preemptive vs non-preemptive scheduling?',d:'Easy'},
+          {q:'Semaphores vs mutexes?',d:'Medium'},{q:'Explain producer-consumer problem.',d:'Medium'},{q:'What is a page fault?',d:'Medium'},
+          {q:'What are system calls?',d:'Easy'},{q:'Explain Banker algorithm.',d:'Hard'},{q:'Internal vs external fragmentation?',d:'Easy'},
+          {q:'Explain dining philosophers.',d:'Hard'},{q:'What is a context switch?',d:'Medium'},{q:'Monolithic vs microkernel?',d:'Hard'},
+        ]},
+      dbms: { label: 'Database Management Systems', topics: ['SQL','normalization','transactions','ACID','indexing','joins','ER-diagrams','NoSQL','concurrency','views'],
+        questions: [
+          {q:'What is normalization? 1NF to BCNF.',d:'Medium'},{q:'What are ACID properties?',d:'Easy'},{q:'Explain types of joins.',d:'Medium'},
+          {q:'What is indexing? B-tree vs hash.',d:'Medium'},{q:'Deadlock in DBMS?',d:'Hard'},{q:'SQL vs NoSQL?',d:'Easy'},
+          {q:'What is a transaction?',d:'Medium'},{q:'What is a view?',d:'Easy'},{q:'Concurrency control mechanisms?',d:'Hard'},
+          {q:'What is denormalization?',d:'Medium'},{q:'What are triggers?',d:'Medium'},{q:'Two-phase locking?',d:'Hard'},
+          {q:'Clustered vs non-clustered index?',d:'Medium'},{q:'Explain CAP theorem.',d:'Hard'},{q:'Stored procedures vs functions?',d:'Easy'},
+        ]},
+      cn: { label: 'Computer Networks', topics: ['OSI-model','TCP/IP','HTTP','DNS','routing','subnetting','SSL/TLS','sockets','ARP','DHCP'],
+        questions: [
+          {q:'Explain OSI model layers.',d:'Easy'},{q:'TCP vs UDP?',d:'Easy'},{q:'How does DNS work?',d:'Medium'},
+          {q:'What is subnetting?',d:'Medium'},{q:'TCP three-way handshake?',d:'Easy'},{q:'HTTP/2 improvements?',d:'Medium'},
+          {q:'What is NAT?',d:'Medium'},{q:'How does HTTPS/TLS work?',d:'Medium'},{q:'Hub vs switch vs router?',d:'Easy'},
+          {q:'TCP congestion control?',d:'Hard'},{q:'What is ARP?',d:'Medium'},{q:'What is DHCP?',d:'Easy'},
+          {q:'Compare routing protocols.',d:'Hard'},{q:'What is a VLAN?',d:'Medium'},{q:'IPv4 vs IPv6?',d:'Easy'},
+        ]},
+      oop: { label: 'OOP Concepts', topics: ['inheritance','polymorphism','encapsulation','abstraction','design-patterns','SOLID','interfaces','composition'],
+        questions: [
+          {q:'Four pillars of OOP?',d:'Easy'},{q:'Abstract class vs interface?',d:'Medium'},{q:'SOLID principles?',d:'Hard'},
+          {q:'Compile-time vs runtime polymorphism?',d:'Medium'},{q:'Diamond problem?',d:'Hard'},{q:'Factory pattern?',d:'Medium'},
+          {q:'Composition vs inheritance?',d:'Medium'},{q:'What is encapsulation?',d:'Easy'},{q:'Singleton pattern?',d:'Medium'},
+          {q:'Overloading vs overriding?',d:'Easy'},{q:'Observer pattern?',d:'Hard'},{q:'Dependency injection?',d:'Medium'},
+          {q:'Shallow vs deep copy?',d:'Medium'},{q:'Liskov Substitution Principle?',d:'Hard'},{q:'Strategy vs template pattern?',d:'Hard'},
+        ]},
+      systemdesign: { label: 'System Design', topics: ['scalability','load-balancing','caching','microservices','databases','message-queues','CDN','API-design'],
+        questions: [
+          {q:'Design a URL shortener.',d:'Medium'},{q:'Horizontal vs vertical scaling?',d:'Easy'},{q:'How does a load balancer work?',d:'Medium'},
+          {q:'What is caching? Redis vs Memcached?',d:'Medium'},{q:'Design a chat app.',d:'Hard'},{q:'What is a CDN?',d:'Easy'},
+          {q:'Microservices vs monolithic?',d:'Medium'},{q:'Design a rate limiter.',d:'Medium'},{q:'What is database sharding?',d:'Hard'},
+          {q:'Design Twitter news feed.',d:'Hard'},{q:'Eventual vs strong consistency?',d:'Medium'},{q:'Design distributed file storage.',d:'Hard'},
+          {q:'API pagination strategies?',d:'Easy'},{q:'Kafka vs RabbitMQ?',d:'Medium'},{q:'Design autocomplete system.',d:'Hard'},
+        ]},
+      webdev: { label: 'Web Development', topics: ['JavaScript','React','Node.js','REST-API','authentication','WebSockets','CSS','security','performance'],
+        questions: [
+          {q:'var vs let vs const?',d:'Easy'},{q:'Virtual DOM in React?',d:'Medium'},{q:'What is CORS?',d:'Medium'},
+          {q:'JWT authentication?',d:'Medium'},{q:'WebSockets vs HTTP?',d:'Medium'},{q:'JavaScript event loop?',d:'Medium'},
+          {q:'REST vs GraphQL?',d:'Medium'},{q:'SSR vs CSR?',d:'Medium'},{q:'Critical rendering path?',d:'Hard'},
+          {q:'Web Workers?',d:'Hard'},{q:'CSS box model?',d:'Easy'},{q:'What is XSS?',d:'Medium'},
+          {q:'Lazy loading?',d:'Easy'},{q:'JavaScript closures?',d:'Medium'},{q:'Cookies vs localStorage?',d:'Easy'},
+        ]},
+      corecs: { label: 'Core CS Theory', topics: ['complexity','automata','compilers','discrete-math','computability','logic'],
+        questions: [
+          {q:'P vs NP?',d:'Hard'},{q:'Big-O notation?',d:'Easy'},{q:'DFA vs NFA?',d:'Medium'},
+          {q:'Compiler phases?',d:'Medium'},{q:'Halting problem?',d:'Hard'},{q:'Regular expressions?',d:'Easy'},
+          {q:'Context-free grammar?',d:'Medium'},{q:'NP-hard vs NP-complete?',d:'Hard'},{q:'Chomsky hierarchy?',d:'Hard'},
+          {q:'Turing machine?',d:'Hard'},{q:'Boolean algebra?',d:'Easy'},{q:'Pushdown automata?',d:'Medium'},
+          {q:'Lexical analysis?',d:'Medium'},{q:'Church-Turing thesis?',d:'Hard'},{q:'Space vs time complexity?',d:'Easy'},
+        ]}
+    };
+
+    const samples = [];
+    for (const [domainId, d] of Object.entries(DOMAINS)) {
+      for (const q of d.questions) {
+        // Question sample
+        samples.push({ instruction: `Generate a ${q.d} ${domainId} interview question.`, input: `${d.label}, ${q.d}`, output: JSON.stringify({question:q.q,difficulty:q.d,type:'text',domain:domainId}), domain: domainId, difficulty: q.d, questionType: 'text', source: 'seed', questionCount: 1, isValidJSON: true, modelUsed: 'seed' });
+        // Answer sample
+        samples.push({ instruction: `Evaluate a ${domainId} answer.`, input: JSON.stringify({question:q.q,answer:`Key concepts of ${q.q}`}), output: JSON.stringify({score:7,isCorrect:true}), domain: domainId, difficulty: q.d, questionType: 'text', source: 'seed', questionCount: 1, isValidJSON: true, modelUsed: 'seed' });
+        // MCQ sample
+        samples.push({ instruction: `Generate a ${q.d} MCQ about ${domainId}.`, input: `${d.label}, ${q.d}, mcq`, output: JSON.stringify({question:q.q,type:'mcq',options:['A','B','C','D'],correctAnswer:0}), domain: domainId, difficulty: q.d, questionType: 'mcq', source: 'seed', questionCount: 1, isValidJSON: true, modelUsed: 'seed' });
+        // Topic variants
+        for (const t of d.topics.slice(0, 2)) {
+          samples.push({ instruction: `Generate a question about ${t} in ${domainId}.`, input: `${d.label}, ${t}`, output: JSON.stringify({question:`Explain ${t} in ${d.label}.`,type:'text',domain:domainId}), domain: domainId, difficulty: q.d, questionType: 'text', source: 'seed', questionCount: 1, isValidJSON: true, modelUsed: 'seed' });
+        }
+      }
+    }
+
+    // Insert in batches of 50
+    for (let i = 0; i < samples.length; i += 50) {
+      await TrainingData.insertMany(samples.slice(i, i + 50));
+    }
+    const after = await TrainingData.countDocuments();
+    res.json({ added: after - before, total: after, ready: after >= 500 });
+  } catch (err) {
+    console.error('[Seed] Error:', err.message, err.stack);
     res.status(500).json({ error: err.message });
   }
 });
