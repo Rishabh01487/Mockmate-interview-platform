@@ -46,6 +46,15 @@ function AppInner() {
           <span style={{ color: '#6b7280', fontSize: '0.78rem' }}>
             👤 {user?.name || user?.email}
           </span>
+          <a href="https://zerotoone-plum.vercel.app" target="_blank" rel="noopener noreferrer"
+            style={{
+              background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)',
+              color: '#a5b4fc', borderRadius: 6, padding: '0.28rem 0.65rem',
+              fontSize: '0.75rem', cursor: 'pointer', fontWeight: 500,
+              textDecoration: 'none',
+            }}>
+            DSA Practice
+          </a>
           <button
             onClick={logout}
             style={{
