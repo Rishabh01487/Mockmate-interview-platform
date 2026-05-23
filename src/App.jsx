@@ -25,11 +25,10 @@ function AppInner() {
     </div>
   );
 
-  // Not logged in → show auth page
-  if (!isLoggedIn) return <AuthPage />;
-
   const goHome   = () => setPage('home');
   const goReport = (session) => { setReportSession(session); setPage('report'); };
+
+  if (!isLoggedIn && page !== 'auth') setPage('home');
 
   return (
     <div id="app-root">
@@ -44,7 +43,7 @@ function AppInner() {
           gap: '0.75rem',
         }}>
           <span style={{ color: '#6b7280', fontSize: '0.78rem' }}>
-            👤 {user?.name || user?.email}
+            {user ? `👤 ${user?.name || user?.email}` : ''}
           </span>
           <a href="https://zerotoone-plum.vercel.app" target="_blank" rel="noopener noreferrer"
             style={{
@@ -55,23 +54,37 @@ function AppInner() {
             }}>
             DSA Practice
           </a>
-          <button
-            onClick={logout}
-            style={{
-              background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)',
-              color: '#fca5a5', borderRadius: 6, padding: '0.28rem 0.65rem',
-              fontSize: '0.75rem', cursor: 'pointer', fontWeight: 500,
-            }}
-          >
-            Logout
-          </button>
+          {user ? (
+            <button
+              onClick={logout}
+              style={{
+                background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)',
+                color: '#fca5a5', borderRadius: 6, padding: '0.28rem 0.65rem',
+                fontSize: '0.75rem', cursor: 'pointer', fontWeight: 500,
+              }}
+            >
+              Logout
+            </button>
+          ) : (
+            <button
+              onClick={() => setPage('auth')}
+              style={{
+                background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.25)',
+                color: '#a5b4fc', borderRadius: 6, padding: '0.28rem 0.65rem',
+                fontSize: '0.75rem', cursor: 'pointer', fontWeight: 500,
+              }}
+            >
+              Sign In
+            </button>
+          )}
         </div>
       )}
 
+      {page === 'auth' && <AuthPage onBack={() => setPage('home')} />}
       {page === 'home' && (
         <HomePage
-          onStartInterview={() => setPage('interview')}
-          onOpenRoom={() => setPage('room')}
+          onStartInterview={() => isLoggedIn ? setPage('interview') : setPage('auth')}
+          onOpenRoom={() => isLoggedIn ? setPage('room') : setPage('auth')}
         />
       )}
       {page === 'interview' && <InterviewPage onGoHome={goHome} />}

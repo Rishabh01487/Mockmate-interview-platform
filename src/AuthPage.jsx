@@ -3,7 +3,7 @@ import { registerUser, loginUser } from './services/authService.js';
 import { useAuth } from './context/AuthContext.jsx';
 import './AuthPage.css';
 
-export default function AuthPage() {
+export default function AuthPage({ onBack }) {
   const { login } = useAuth();
   const [mode,    setMode]    = useState('login'); // 'login' | 'signup'
   const [loading, setLoading] = useState(false);
@@ -26,6 +26,7 @@ export default function AuthPage() {
         data = await registerUser({ name: form.name, email: form.email, password: form.password });
       }
       login(data.token, data.user);
+      if (onBack) onBack();
     } catch (err) {
       setError(err.message || 'Something went wrong');
     }
