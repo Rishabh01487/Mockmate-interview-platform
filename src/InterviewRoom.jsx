@@ -125,32 +125,40 @@ const useLeaderboard = (roomCode) => {
   return { leaderboard, roomStatus };
 };
 
-// Leaderboard display component (small sidebar)
+// Leaderboard display component — shows live rankings during session
 const LeaderboardPanel = ({ roomCode }) => {
   const { leaderboard, roomStatus } = useLeaderboard(roomCode);
   if (!leaderboard || leaderboard.length === 0) return null;
 
+  const barColor = (i) => i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#d97706' : '#6366f1';
+
   return (
     <div className="room-lb-panel">
       <div className="room-lb-header">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5a2.5 2.5 0 0 1 0 5"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5a2.5 2.5 0 0 0 0 5"/><path d="M4 22h16"/><path d="M10 22V2l4 4v16"/>
-        </svg>
+        <span className="room-lb-live" />
         Live Leaderboard
         <span className="room-lb-count">{leaderboard.length} participant{leaderboard.length !== 1 ? 's' : ''}</span>
       </div>
-      <div className="room-lb-list">
-        {leaderboard.map((entry, i) => (
-          <div key={entry.participantId || i} className={`room-lb-row ${i === 0 ? 'room-lb-row--lead' : ''}`}>
-            <span className="room-lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
-            <div className="room-lb-info">
+      {leaderboard.map((entry, i) => (
+        <div key={entry.participantId || i} className={`room-lb-row ${i === 0 ? 'room-lb-row--lead' : ''}`}>
+          <span className="room-lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+          <div className="room-lb-info">
+            <div className="room-lb-name-row">
               <span className="room-lb-name">{entry.name}</span>
-              <span className="room-lb-progress">{entry.questionsAnswered}/{entry.totalQuestions} Qs · {entry.percentage}%</span>
+              {entry.status === 'completed' && <span className="room-lb-badge room-lb-badge--done">✓</span>}
+              {entry.status === 'active' && <span className="room-lb-badge room-lb-badge--live">●</span>}
             </div>
-            <span className="room-lb-score">{entry.points}<small>/{entry.maxPoints}</small></span>
+            <div className="room-lb-bar-track">
+              <div className="room-lb-bar-fill" style={{ width: `${entry.percentage}%`, background: barColor(i) }} />
+            </div>
+            <span className="room-lb-progress">{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
           </div>
-        ))}
-      </div>
+          <div className="room-lb-score-col">
+            <span className="room-lb-score">{entry.percentage}%</span>
+            <span className="room-lb-score-sub">{entry.points}/{entry.maxPoints}</span>
+          </div>
+        </div>
+      ))}
       <div className="room-lb-status">
         Status: <strong>{roomStatus || 'N/A'}</strong>
       </div>
@@ -161,8 +169,6 @@ const LeaderboardPanel = ({ roomCode }) => {
 // Projector view — full-screen leaderboard for auditorium projection
 const ProjectorView = ({ roomCode, onBack }) => {
   const { leaderboard, roomStatus } = useLeaderboard(roomCode);
-
-  const maxQuestions = leaderboard && leaderboard.length > 0 ? Math.max(...leaderboard.map(e => e.totalQuestions)) : 0;
 
   return (
     <div className="projector-root">
