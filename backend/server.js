@@ -498,7 +498,7 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 const AI_BASE_URL = (process.env.AI_API_URL || 'https://api.deepseek.com/v1').trim().replace(/\/$/, '');
 const AI_KEY = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL = (process.env.AI_MODEL || 'deepseek-chat').trim();
+const AI_MODEL = (process.env.AI_MODEL || 'deepseek-v4-flash').trim();
 
 console.log(`✓ AI Provider → ${AI_BASE_URL} (model: ${AI_MODEL})`);
 

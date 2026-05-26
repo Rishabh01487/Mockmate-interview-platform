@@ -15,7 +15,7 @@ services:
       - key: AI_API_KEY
         value: sk-2eb60e010747407795d24dbf5516197b
       - key: AI_MODEL
-        value: deepseek-chat
+        value: deepseek-v4-flash
       - key: CLIENT_URL
         sync: false          # Set in Render dashboard → your Vercel frontend URL
     healthCheckPath: /api/health
