@@ -80,27 +80,47 @@ const DIFF_POINTS = { easy: 5, medium: 10, hard: 20 };
 const getMaxPoints = (q) => DIFF_POINTS[(q.difficulty || 'medium').toLowerCase()] || DIFF_POINTS.medium;
 
 // Leaderboard polling hook
-const useLeaderboard = (roomCode, pollInterval = 1000) => {
+const useLeaderboard = (roomCode) => {
   const [leaderboard, setLeaderboard] = useState(null);
   const [roomStatus, setRoomStatus] = useState('');
+  const wsRef = useRef(null);
 
   useEffect(() => {
     if (!roomCode) return;
-    const fetchLB = async () => {
+
+    // Initial fetch
+    fetch(`${API_BASE}/api/rooms/${roomCode}/leaderboard`)
+      .then(r => r.json())
+      .then(data => { if (data.success) { setLeaderboard(data.leaderboard); setRoomStatus(data.roomStatus); } })
+      .catch(() => {});
+
+    // WebSocket connection
+    const wsUrl = API_BASE.replace(/^http/, 'ws');
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'join-room', roomCode }));
+    ws.onmessage = (e) => {
       try {
-        const res = await fetch(`${API_BASE}/api/rooms/${roomCode}/leaderboard`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.success) {
-          setLeaderboard(data.leaderboard);
-          setRoomStatus(data.roomStatus);
+        const d = JSON.parse(e.data);
+        if (d.type === 'leaderboard-update' && d.roomCode === roomCode) {
+          setLeaderboard(d.leaderboard);
+          setRoomStatus(d.roomStatus);
         }
       } catch {}
     };
-    fetchLB();
-    const id = setInterval(fetchLB, pollInterval);
-    return () => clearInterval(id);
-  }, [roomCode, pollInterval]);
+    ws.onerror = () => {};
+    ws.onclose = () => {
+      // Reconnect after 2s
+      const t = setTimeout(() => { wsRef.current = null; }, 2000);
+      return () => clearTimeout(t);
+    };
+
+    return () => {
+      try { ws.send(JSON.stringify({ type: 'leave-room', roomCode })); } catch {}
+      ws.close();
+    };
+  }, [roomCode]);
 
   return { leaderboard, roomStatus };
 };

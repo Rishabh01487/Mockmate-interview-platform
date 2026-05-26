@@ -2,10 +2,12 @@ require('dotenv').config();
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']); // Force Google DNS — fixes Atlas SRV lookup on local machines
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const { WebSocketServer } = require('ws');
 
 // ── Models ───────────────────────────────────────────────────
 const User             = require('./models/UserSchema');
@@ -25,8 +27,98 @@ const { logQuestionGeneration, logCandidateAnswers, exportToFDrive, getTrainingS
 const { register, login, updateProfile, changePassword } = require('./controller/authController');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'mockmate-dev-secret';
+
+// ── WebSocket ────────────────────────────────────────────────
+const wss = new WebSocketServer({ server });
+const WS_ROOMS = new Map(); // roomCode → Set<WebSocket>
+
+// Compute leaderboard for a room code (reuses existing logic inline)
+async function computeLeaderboard(code) {
+  const maxPerQ = { easy: 5, medium: 10, hard: 20 };
+  const computeEntries = (participants, questions) => {
+    const totalMax = (questions || []).reduce((s, aq) => {
+      const diff = (aq.difficulty || aq.questionId?.difficulty || 'medium').toLowerCase();
+      return s + (maxPerQ[diff] || maxPerQ.medium);
+    }, 0) || 10;
+    return (participants || []).map(p => {
+      const answers = p.answers || [];
+      const earned = answers.reduce((s, ans) => {
+        const diff = (ans.difficulty || 'medium').toLowerCase();
+        return s + Math.round(((ans.score || 0) / 100) * (maxPerQ[diff] || maxPerQ.medium));
+      }, 0);
+      return {
+        participantId: p.id, name: p.name || 'Anonymous', email: p.email || '',
+        points: earned, maxPoints: totalMax,
+        percentage: totalMax > 0 ? Math.round((earned / totalMax) * 100) : 0,
+        questionsAnswered: answers.length,
+        totalQuestions: (questions || []).length || answers.length,
+        status: p.status || 'active',
+      };
+    }).sort((a, b) => b.points - a.points);
+  };
+
+  // Try in-memory first
+  let roomData = LIVE_ROOMS.get(code);
+  if (!roomData) {
+    const cached = await LiveRoomCache.findOne({ roomCode: code }).lean();
+    if (!cached) return null;
+    roomData = cached.data || cached;
+  }
+  const participants = roomData.participants || [];
+  if (participants.length > 0) {
+    return { leaderboard: computeEntries(participants, roomData.assignedQuestions || []), roomStatus: roomData.status || 'active' };
+  }
+  // Single-candidate fallback
+  const questions = roomData.assignedQuestions || [];
+  const answers = roomData.candidateAnswers || [];
+  const totalMax = questions.reduce((s, aq) => s + (maxPerQ[(aq.difficulty || 'medium').toLowerCase()] || maxPerQ.medium), questions.length > 0 ? 0 : answers.length * 10);
+  const earned = answers.reduce((s, ans) => s + Math.round(((ans.score || 0) / 100) * (maxPerQ[(ans.difficulty || 'medium').toLowerCase()] || maxPerQ.medium)), 0);
+  return {
+    leaderboard: [{
+      name: roomData.candidateEmail || 'Candidate', email: roomData.candidateEmail || '',
+      points: earned, maxPoints: totalMax,
+      percentage: totalMax > 0 ? Math.round((earned / totalMax) * 100) : 0,
+      questionsAnswered: answers.length, totalQuestions: questions.length || answers.length,
+    }],
+    roomStatus: roomData.status || 'active',
+  };
+}
+
+async function broadcastLeaderboard(code) {
+  const data = await computeLeaderboard(code);
+  if (!data) return;
+  const msg = JSON.stringify({ type: 'leaderboard-update', roomCode: code, ...data });
+  const clients = WS_ROOMS.get(code);
+  if (clients) {
+    for (const ws of clients) {
+      if (ws.readyState === 1) ws.send(msg);
+    }
+  }
+}
+
+wss.on('connection', (ws) => {
+  let currentRoom = null;
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg.type === 'join-room' && msg.roomCode) {
+        const code = msg.roomCode.toUpperCase();
+        currentRoom = code;
+        if (!WS_ROOMS.has(code)) WS_ROOMS.set(code, new Set());
+        WS_ROOMS.get(code).add(ws);
+      }
+    } catch {}
+  });
+  ws.on('close', () => {
+    if (currentRoom && WS_ROOMS.has(currentRoom)) {
+      WS_ROOMS.get(currentRoom).delete(ws);
+      if (WS_ROOMS.get(currentRoom).size === 0) WS_ROOMS.delete(currentRoom);
+    }
+  });
+});
 
 // ════════════════════════════════════════════════════════════
 //  Core Middleware
@@ -240,6 +332,7 @@ app.patch('/api/live-rooms/:code', async (req, res) => {
     }
     LIVE_ROOMS.set(code, room);
     await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: room });
+    broadcastLeaderboard(code);
     res.json({ success: true, room });
   } catch (err) {
     console.error('[PATCH /api/live-rooms/:code]', err.message);
@@ -272,6 +365,7 @@ app.post('/api/live-rooms/:code/join', async (req, res) => {
     });
     LIVE_ROOMS.set(code, room);
     await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: room });
+    broadcastLeaderboard(code);
     res.json({ success: true, participantId, participant: room.participants[room.participants.length - 1] });
   } catch (err) {
     console.error('[POST /api/live-rooms/:code/join]', err.message);
@@ -373,6 +467,7 @@ app.post('/api/live-rooms/:code/complete', async (req, res) => {
       await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: LIVE_ROOMS.get(code) });
     }
 
+    broadcastLeaderboard(code);
     res.status(201).json({ success: true, interviewId: interview._id, totalPoints: totalPointsEarned, maxPoints: totalMaxPoints, overallScore });
   } catch (err) {
     console.error('[POST /live-rooms/:code/complete]', err);
@@ -1540,6 +1635,6 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
-app.listen(PORT, () => console.log(`✓ MockMate API → http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`✓ MockMate API → http://localhost:${PORT}`));
 
 module.exports = app;
