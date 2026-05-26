@@ -1427,9 +1427,6 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
-// Only start the HTTP server when running directly (not when imported by Vercel)
-if (require.main === module) {
-  app.listen(PORT, () => console.log(`✓ MockMate API → http://localhost:${PORT}`));
-}
+app.listen(PORT, () => console.log(`✓ MockMate API → http://localhost:${PORT}`));
 
 module.exports = app;
