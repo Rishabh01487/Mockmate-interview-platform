@@ -34,12 +34,35 @@ const sessionQuestionSchema = new mongoose.Schema(
     questionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Question',
-      required: true,
+    },
+    text: {
+      type: String,
+      default: '',
+    },
+    questionType: {
+      type: String,
+      enum: ['text', 'mcq', 'coding'],
+      default: 'text',
     },
     userAnswer: {
       type: String,
       default: '',
       trim: true,
+    },
+    score: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    pointsEarned: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    maxPossiblePoints: {
+      type: Number,
+      default: 10,
+      min: 1,
     },
     aiFeedback: {
       type: aiFeedbackSchema,
@@ -77,8 +100,13 @@ const interviewSchema = new mongoose.Schema(
     // Interview classification
     type: {
       type: String,
-      enum: ['technical', 'behavioral', 'system_design', 'hr'],
-      required: [true, 'Interview type is required'],
+      enum: ['technical', 'behavioral', 'system_design', 'hr', 'room'],
+      default: 'technical',
+    },
+    roomCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
     },
     topic: {
       type: String,
@@ -87,20 +115,6 @@ const interviewSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: [
-        'Data Structures & Algorithms',
-        'Operating Systems',
-        'Database Management Systems',
-        'Computer Networks',
-        'Object-Oriented Programming',
-        'System Design',
-        'Web Development',
-        'Cloud Computing',
-        'Cybersecurity',
-        'Artificial Intelligence',
-        'Software Engineering',
-        'Behavioral',
-      ],
     },
     difficulty: {
       type: String,
@@ -120,6 +134,16 @@ const interviewSchema = new mongoose.Schema(
       min: 0,
       max: 100,
       default: 0,
+    },
+    totalPoints: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    maxPossiblePoints: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     totalQuestions: {
       type: Number,
@@ -156,6 +180,12 @@ const interviewSchema = new mongoose.Schema(
         ref: 'Feedback',
       },
     ],
+
+    // Reference to interviewer (for room-based interviews)
+    interviewerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
   },
   {
     timestamps: true,

@@ -104,6 +104,9 @@ const adminOnly = (req, res, next) =>
     ? res.status(403).json({ success: false, message: 'Admin access required' })
     : next();
 
+// Difficulty-based point values
+const POINTS = { easy: 5, medium: 10, hard: 20 };
+
 // Mock AI scorer — replace with GPT/Gemini call in production
 const mockScore = (answer = '', timedOut = false) => {
   if (timedOut || !answer.trim()) return { overall: 0, clarity: 0, relevance: 0, technical: 0, completeness: 0 };
@@ -116,6 +119,13 @@ const mockScore = (answer = '', timedOut = false) => {
     technical:    Math.round(base * 0.88),
     completeness: Math.round(base * 0.85),
   };
+};
+
+// Score a response with difficulty weighting: returns { points, maxPoints, pct }
+const scoreWithDifficulty = (difficulty = 'medium', answer = '', timedOut = false) => {
+  const pct = mockScore(answer, timedOut);
+  const maxPoints = POINTS[difficulty] || POINTS.medium;
+  return { points: Math.round((pct.overall / 100) * maxPoints), maxPoints, pct: pct.overall };
 };
 
 // ════════════════════════════════════════════════════════════
@@ -797,10 +807,20 @@ app.post('/api/rooms/:code/join', authenticate, async (req, res) => {
 app.patch('/api/rooms/:code/answer', authenticate, async (req, res) => {
   try {
     const { questionId, questionType, textAnswer, selectedOption, isCorrect, submissionId, score, timeTaken } = req.body;
-    const room = await InterviewRoom.findOne({ roomCode: req.params.code.toUpperCase() });
+    const room = await InterviewRoom.findOne({ roomCode: req.params.code.toUpperCase() })
+      .populate('assignedQuestions.questionId', 'difficulty');
     if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
     if (room.suspension?.isSuspended)
       return res.status(403).json({ success: false, message: 'Session is suspended' });
+
+    // Compute difficulty-based points
+    const aq = room.assignedQuestions.find(q =>
+      (q.questionId?._id?.toString() || q.questionId?.toString()) === questionId
+    );
+    const diff = (aq?.questionId?.difficulty || 'medium').toLowerCase();
+    const maxPoints = POINTS[diff] || POINTS.medium;
+    const pctScore = score || 0;
+    const pointsEarned = Math.round((pctScore / 100) * maxPoints);
 
     const existing = room.candidateAnswers.find(a => a.questionId?.toString() === questionId);
     const answerEntry = {
@@ -809,7 +829,9 @@ app.patch('/api/rooms/:code/answer', authenticate, async (req, res) => {
       selectedOption: selectedOption ?? undefined,
       isCorrect: isCorrect ?? undefined,
       submissionId: submissionId || undefined,
-      score: score || 0,
+      score: pctScore,
+      pointsEarned,
+      maxPoints,
       timeTaken: timeTaken || 0,
       answeredAt: new Date(),
     };
@@ -820,7 +842,7 @@ app.patch('/api/rooms/:code/answer', authenticate, async (req, res) => {
       room.candidateAnswers.push(answerEntry);
     }
     await room.save();
-    res.json({ success: true });
+    res.json({ success: true, pointsEarned, maxPoints });
   } catch (err) {
     console.error('[PATCH /rooms/:code/answer]', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -888,11 +910,14 @@ app.patch('/api/rooms/:code/revive', authenticate, async (req, res) => {
 // PATCH /api/rooms/:code/complete — end the session
 app.patch('/api/rooms/:code/complete', authenticate, async (req, res) => {
   try {
-    const room = await InterviewRoom.findOne({ roomCode: req.params.code.toUpperCase() });
+    const room = await InterviewRoom.findOne({ roomCode: req.params.code.toUpperCase() })
+      .populate('candidateAnswers.questionId', 'difficulty text');
     if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
 
-    // Calculate scores
+    // Calculate scores with difficulty weighting
     const answers = room.candidateAnswers;
+    const questions = room.assignedQuestions || [];
+
     const mcqAnswers    = answers.filter(a => a.questionType === 'mcq');
     const codingAnswers = answers.filter(a => a.questionType === 'coding');
     const textAnswers   = answers.filter(a => a.questionType === 'text');
@@ -914,7 +939,59 @@ app.patch('/api/rooms/:code/complete', authenticate, async (req, res) => {
         timeSpent: Math.round((room.settings?.timeLimitMinutes || 60)),
       });
     }
-    res.json({ success: true, room });
+
+    // Persist to Interview collection for long-term history
+    const questionEntries = [];
+    for (const ans of answers) {
+      const aq = questions.find(q => {
+        const qid = typeof q.questionId === 'object' ? q.questionId?._id?.toString() : q.questionId?.toString();
+        return qid === ans.questionId?.toString();
+      });
+      const diff = (aq?.questionId?.difficulty || 'medium').toLowerCase();
+      const maxPoints = POINTS[diff] || POINTS.medium;
+      questionEntries.push({
+        questionId: ans.questionId,
+        text: aq?.text || aq?.questionId?.text || 'Unknown',
+        questionType: ans.questionType || 'text',
+        userAnswer: ans.textAnswer || '',
+        score: ans.score || 0,
+        pointsEarned: Math.round(((ans.score || 0) / 100) * maxPoints),
+        maxPossiblePoints: maxPoints,
+        timeTaken: ans.timeTaken || 0,
+        answeredAt: ans.answeredAt,
+      });
+    }
+
+    const totalPointsEarned = questionEntries.reduce((s, q) => s + q.pointsEarned, 0);
+    const totalMaxPoints = questionEntries.reduce((s, q) => s + q.maxPossiblePoints, 0);
+
+    const interview = await Interview.create({
+      userId: room.candidateId,
+      type: 'room',
+      category: room.domainGroups?.[0]?.domain || 'general',
+      status: 'completed',
+      roomCode: room.roomCode,
+      totalQuestions: questions.length,
+      completedQuestions: answers.length,
+      overallScore: totalMaxPoints > 0 ? Math.round((totalPointsEarned / totalMaxPoints) * 100) : 0,
+      totalPoints: totalPointsEarned,
+      maxPossiblePoints: totalMaxPoints,
+      completedAt: new Date(),
+      totalTimeTaken: room.settings?.timeLimitMinutes * 60 || 0,
+      questions: questionEntries,
+      interviewerId: room.interviewerId,
+    });
+    await interview.save();
+
+    // Also mark interview as completed on User stats
+    if (room.candidateId) {
+      await User.findByIdAndUpdate(room.candidateId, {
+        $inc: { 'stats.totalInterviews': 1, 'stats.questionsAnswered': answers.length },
+        $set: { 'stats.lastActive': new Date() },
+      });
+    }
+
+    res.json({ success: true, room, interviewId: interview._id });
   } catch (err) {
     console.error('[PATCH /rooms/:code/complete]', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -937,6 +1014,122 @@ app.get('/api/rooms/:code/report', authenticate, async (req, res) => {
 
     res.json({ success: true, room, scores: room.scores, violations: room.violations });
   } catch { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ════════════════════════════════════════════════════════════
+//  Admin Room Results   /api/rooms/:code/results
+// ════════════════════════════════════════════════════════════
+app.get('/api/rooms/:code/results', authenticate, async (req, res) => {
+  try {
+    const room = await InterviewRoom.findOne({ roomCode: req.params.code.toUpperCase() })
+      .populate('candidateAnswers.questionId', 'text difficulty questionType category')
+      .populate('candidateId', 'name email')
+      .populate('interviewerId', 'name email');
+    if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
+
+    const uid = req.user.userId;
+    const isAdmin = req.user.role === 'admin';
+    const isInterviewer = room.interviewerId?._id?.toString() === uid || room.interviewerId?.toString() === uid;
+    if (!isAdmin && !isInterviewer)
+      return res.status(403).json({ success: false, message: 'Only the interviewer or an admin can view results' });
+
+    const answers = room.candidateAnswers || [];
+    const questions = room.assignedQuestions || [];
+
+    // Build per-question breakdown with difficulty-based points
+    const breakdown = questions.map(aq => {
+      const ans = answers.find(a => a.questionId?.toString() === aq.questionId?.toString());
+      const diff = (aq.questionId?.difficulty || 'medium').toLowerCase();
+      const maxPoints = POINTS[diff] || POINTS.medium;
+      const score = ans ? (ans.score || 0) : 0;
+      return {
+        questionId: aq.questionId?._id || aq.questionId,
+        text: aq.questionId?.text || aq.text || 'Unknown',
+        difficulty: diff,
+        maxPoints,
+        score,
+        pointsEarned: Math.round((score / 100) * maxPoints),
+        timeTaken: ans?.timeTaken || 0,
+        answeredAt: ans?.answeredAt || null,
+      };
+    });
+
+    const totalMaxPoints = breakdown.reduce((s, q) => s + q.maxPoints, 0);
+    const totalPointsEarned = breakdown.reduce((s, q) => s + q.pointsEarned, 0);
+
+    res.json({
+      success: true,
+      room: {
+        roomCode: room.roomCode,
+        title: room.title,
+        status: room.status,
+        createdAt: room.createdAt,
+        completedAt: room.completedAt,
+        candidateEmail: room.candidateEmail,
+        candidate: room.candidateId ? { name: room.candidateId.name, email: room.candidateId.email } : null,
+        interviewer: room.interviewerId ? { name: room.interviewerId.name, email: room.interviewerId.email } : null,
+      },
+      scores: {
+        overall: room.scores?.overall || 0,
+        totalPointsEarned,
+        totalMaxPoints,
+        percentage: totalMaxPoints > 0 ? Math.round((totalPointsEarned / totalMaxPoints) * 100) : 0,
+      },
+      breakdown,
+      violations: room.violations || [],
+      scores: room.scores,
+    });
+  } catch (err) {
+    console.error('[GET /rooms/:code/results]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  Live Leaderboard   /api/rooms/:code/leaderboard
+//  Polled by frontend to show candidate rankings during session
+// ════════════════════════════════════════════════════════════
+app.get('/api/rooms/:code/leaderboard', async (req, res) => {
+  try {
+    const room = await InterviewRoom.findOne({ roomCode: req.params.code.toUpperCase() })
+      .populate('candidateAnswers.questionId', 'difficulty')
+      .populate('candidateId', 'name email');
+    if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
+
+    const answers = room.candidateAnswers || [];
+    const questions = room.assignedQuestions || [];
+
+    // Calculate total max points for this room
+    const totalMaxPoints = questions.reduce((s, aq) => {
+      const diff = (aq.questionId?.difficulty || 'medium').toLowerCase();
+      return s + (POINTS[diff] || POINTS.medium);
+    }, 0);
+
+    // Calculate candidate's earned points
+    const earnedPoints = answers.reduce((s, ans) => {
+      const aq = questions.find(q => q.questionId?.toString() === ans.questionId?.toString());
+      const diff = (aq?.questionId?.difficulty || 'medium').toLowerCase();
+      const maxPoints = POINTS[diff] || POINTS.medium;
+      return s + Math.round((ans.score || 0) / 100 * maxPoints);
+    }, 0);
+
+    res.json({
+      success: true,
+      leaderboard: [{
+        name: room.candidateId?.name || room.candidateEmail || 'Candidate',
+        email: room.candidateId?.email || room.candidateEmail || '',
+        points: earnedPoints,
+        maxPoints: totalMaxPoints,
+        percentage: totalMaxPoints > 0 ? Math.round((earnedPoints / totalMaxPoints) * 100) : 0,
+        questionsAnswered: answers.length,
+        totalQuestions: questions.length,
+      }],
+      roomStatus: room.status,
+    });
+  } catch (err) {
+    console.error('[GET /rooms/:code/leaderboard]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
 });
 
 // ════════════════════════════════════════════════════════════

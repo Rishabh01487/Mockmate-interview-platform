@@ -7,6 +7,10 @@ import './components/AnalyticsDashboard.css';
 import { generateQuestions, isOllamaOnline } from './services/ollamaService';
 import { API_BASE } from './config/api.js';
 
+// Difficulty-based point values (must match backend)
+const DIFF_POINTS = { easy: 5, medium: 10, hard: 20 };
+const getMaxPoints = (d) => DIFF_POINTS[(d || 'medium').toLowerCase()] || DIFF_POINTS.medium;
+
 // ============================================================
 // Shared tiny SVG icons
 // ============================================================
@@ -272,26 +276,32 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
   const handleTextSubmit = useCallback((timedOut = false) => {
     if (!textAnswer.trim() && !timedOut) return;
     setLoading(true);
+    const maxPts = getMaxPoints(q?.difficulty);
     setTimeout(() => {
       const words = textAnswer.trim().split(/\s+/).length;
-      const score = timedOut ? 0 : Math.min(10, Math.max(1, Math.round((words / 40) * 10)));
-      saveResponse({ answer: textAnswer.trim() || '[No answer — time expired]', score, timedOut });
+      const pct = timedOut ? 0 : Math.min(100, Math.round((words / 80) * 100));
+      const score = Math.round((pct / 100) * maxPts);
+      saveResponse({ answer: textAnswer.trim() || '[No answer — time expired]', score, maxPoints: maxPts, timedOut });
     }, 500);
-  }, [textAnswer, saveResponse]);
+  }, [textAnswer, saveResponse, q]);
 
   // MCQ submission (auto-scored)
   const handleMCQSubmit = useCallback((selectedIndex, isCorrect, score100) => {
+    const maxPts = getMaxPoints(q?.difficulty);
     saveResponse({
       answer:         q.options?.[selectedIndex]?.text || '',
       selectedOption: selectedIndex,
       isCorrect,
-      score:          isCorrect ? 10 : 0,
+      score:          isCorrect ? maxPts : 0,
+      maxPoints:      maxPts,
     });
   }, [q, saveResponse]);
 
   // Coding submission
   const handleCodingSubmit = useCallback((result) => {
-    const score = Math.round((result.score || 0) / 10); // convert 0-100 → 0-10
+    const maxPts = getMaxPoints(q?.difficulty);
+    const pct = result.score || 0;
+    const score = Math.round((pct / 100) * maxPts);
     saveResponse({
       answer:      result.code,
       code:        result.code,
@@ -300,8 +310,9 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
       totalTests:  result.totalTests,
       status:      result.status,
       score,
+      maxPoints:   maxPts,
     });
-  }, [saveResponse]);
+  }, [saveResponse, q]);
 
   const handleNext = () => {
     if (qIdx < total - 1) {
@@ -354,7 +365,7 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
                   <div className="ip-feedback-score-wrap">
                     <span className="ip-feedback-score-label">Score</span>
                     <span className="ip-feedback-score" style={{ color: lastResp?.score >= 7 ? 'var(--success)' : lastResp?.score >= 4 ? 'var(--warning)' : 'var(--error)' }}>
-                      {lastResp?.score ?? 0}<span className="ip-feedback-score-max">/10</span>
+                      {lastResp?.score ?? 0}<span className="ip-feedback-score-max">/{lastResp?.maxPoints || 10}</span>
                     </span>
                   </div>
                   <span className={`ar-verdict-badge ${lastResp?.status === 'accepted' ? 'ar-verdict--pass' : 'ar-verdict--fail'}`}>
@@ -393,7 +404,7 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
                   <div className="ip-feedback-score-wrap">
                     <span className="ip-feedback-score-label">Score</span>
                     <span className="ip-feedback-score" style={{ color: lastResp?.isCorrect ? 'var(--success)' : 'var(--error)' }}>
-                      {lastResp?.score ?? 0}<span className="ip-feedback-score-max">/10</span>
+                      {lastResp?.score ?? 0}<span className="ip-feedback-score-max">/{lastResp?.maxPoints || 10}</span>
                     </span>
                   </div>
                 </div>
@@ -450,7 +461,7 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
               <div className="ip-feedback-header">
                 <div className="ip-feedback-score-wrap">
                   <span className="ip-feedback-score-label">Score</span>
-                  <span className="ip-feedback-score">{lastResp?.score ?? 0}<span className="ip-feedback-score-max">/10</span></span>
+                  <span className="ip-feedback-score">{lastResp?.score ?? 0}<span className="ip-feedback-score-max">/{lastResp?.maxPoints || 10}</span></span>
                 </div>
                 <div className="ip-feedback-status">
                   {lastResp?.timedOut && <span className="ip-feedback-timeout-tag">Time expired</span>}
@@ -494,8 +505,8 @@ const SessionScreen = ({ questions, category, difficulty, onFinish, onExit }) =>
 const SummaryScreen = ({ responses, category, difficulty, onRestart, onHome }) => {
   const catLabel = CATEGORIES.find(c => c.id === category)?.label || category;
   const total = responses.length;
-  const totalScore = responses.reduce((s, r) => s + (r.score || 0), 0);
-  const maxScore = total * 10;
+  const totalPoints = responses.reduce((s, r) => s + (r.score || 0), 0);
+  const maxPoints = responses.reduce((s, r) => s + (r.maxPoints || getMaxPoints(r.difficulty)), 0);
 
   // Build domainResults for AnalyticsDashboard
   const correctAnswers = responses.filter(r => {
@@ -528,6 +539,14 @@ const SummaryScreen = ({ responses, category, difficulty, onRestart, onHome }) =
         <h2 className="ip-summary-title">{catLabel} · {difficulty}</h2>
       </div>
 
+      {/* Points Summary */}
+      {maxPoints > 0 && (
+        <div style={{ textAlign: 'center', margin: '1rem 0', padding: '1rem', background: 'rgba(99,102,241,0.08)', borderRadius: 12, border: '1px solid rgba(99,102,241,0.2)' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#6366f1' }}>{totalPoints}<span style={{ fontSize: '1rem', color: 'var(--text-dim)', fontWeight: 400, marginLeft: 4 }}>/{maxPoints}</span></div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>points earned · {maxPoints > 0 ? Math.round((totalPoints / maxPoints) * 100) : 0}%</div>
+        </div>
+      )}
+
       {/* Full Analytics Dashboard */}
       <AnalyticsDashboard
         domainResults={domainResults}
@@ -547,9 +566,9 @@ const SummaryScreen = ({ responses, category, difficulty, onRestart, onHome }) =
                 {{ text: 'Theory', mcq: 'MCQ', coding: 'Code' }[r.questionType] || 'Theory'}
               </span>
               <div className="ip-summary-item-score-bar">
-                <div className="ip-summary-item-score-fill" style={{ width: `${(r.score / 10) * 100}%` }}></div>
+                <div className="ip-summary-item-score-fill" style={{ width: `${((r.score || 0) / (r.maxPoints || 10)) * 100}%` }}></div>
               </div>
-              <span className="ip-summary-item-score">{r.score}/10</span>
+              <span className="ip-summary-item-score">{r.score}/{r.maxPoints || 10}</span>
             </div>
             <p className="ip-summary-item-q">{r.question}</p>
             {r.answer && r.answer !== '[No answer — time expired]' && r.answer !== '[Time expired]' && (

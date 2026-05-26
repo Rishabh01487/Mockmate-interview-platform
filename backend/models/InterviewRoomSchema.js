@@ -30,6 +30,8 @@ const roomAnswerSchema = new mongoose.Schema(
     submissionId: { type: mongoose.Schema.Types.ObjectId, ref: 'CodingSubmission' },
 
     score:        { type: Number, default: 0, min: 0, max: 100 },
+    pointsEarned: { type: Number, default: 0, min: 0 },
+    maxPoints:    { type: Number, default: 10, min: 1 },
     timeTaken:    { type: Number, default: 0 }, // seconds
     answeredAt:   { type: Date },
     skipped:      { type: Boolean, default: false },

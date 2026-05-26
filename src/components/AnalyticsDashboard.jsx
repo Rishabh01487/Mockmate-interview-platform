@@ -187,6 +187,9 @@ export default function AnalyticsDashboard({ domainResults = [], totalTime = 0, 
     color: diff === 'Easy' ? '#22c55e' : diff === 'Medium' ? '#f59e0b' : '#ef4444',
   }));
 
+  const totalPoints = domainResults.reduce((s, d) => s + (d.pointsEarned || 0), 0);
+  const totalMaxPoints = domainResults.reduce((s, d) => s + (d.maxPoints || 0), 0);
+
   return (
     <div className="analytics-dashboard">
       <div className="analytics-header">
@@ -214,6 +217,12 @@ export default function AnalyticsDashboard({ domainResults = [], totalTime = 0, 
             <span className="analytics-stat-number">{domainResults.length}</span>
             <span className="analytics-stat-label">Domains</span>
           </div>
+          {totalMaxPoints > 0 && (
+            <div className="analytics-stat-card">
+              <span className="analytics-stat-number" style={{ color: '#6366f1' }}>{totalPoints}<span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>/{totalMaxPoints}</span></span>
+              <span className="analytics-stat-label">Points</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -281,7 +290,7 @@ export default function AnalyticsDashboard({ domainResults = [], totalTime = 0, 
         <h3 className="analytics-chart-title">Detailed Domain Breakdown</h3>
         <div className="analytics-domain-table">
           <div className="analytics-table-header">
-            <span>Domain</span><span>Questions</span><span>Correct</span><span>Score</span><span>Time Used</span>
+            <span>Domain</span><span>Questions</span><span>Correct</span><span>Points</span><span>Score</span><span>Time Used</span>
           </div>
           {domainResults.map((d, i) => {
             const pct = d.totalScore;
@@ -295,6 +304,7 @@ export default function AnalyticsDashboard({ domainResults = [], totalTime = 0, 
                 </span>
                 <span>{d.totalQuestions}</span>
                 <span style={{ color: '#22c55e' }}>{d.correctAnswers}</span>
+                <span style={{ color: '#6366f1' }}>{d.pointsEarned || 0}/{d.maxPoints || 0}</span>
                 <span><span className={`analytics-score-pill ${pct >= 70 ? 'analytics-pill--pass' : pct >= 40 ? 'analytics-pill--warn' : 'analytics-pill--fail'}`}>{pct}%</span></span>
                 <span>{mins}m {secs}s</span>
               </div>

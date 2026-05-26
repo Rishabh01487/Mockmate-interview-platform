@@ -74,6 +74,69 @@ const getLiveRoom = async (code) => {
   }
 };
 
+// Difficulty point values (must match backend)
+const DIFF_POINTS = { easy: 5, medium: 10, hard: 20 };
+
+const getMaxPoints = (q) => DIFF_POINTS[(q.difficulty || 'medium').toLowerCase()] || DIFF_POINTS.medium;
+
+// Leaderboard polling hook
+const useLeaderboard = (roomCode, pollInterval = 5000) => {
+  const [leaderboard, setLeaderboard] = useState(null);
+  const [roomStatus, setRoomStatus] = useState('');
+
+  useEffect(() => {
+    if (!roomCode) return;
+    const fetchLB = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/rooms/${roomCode}/leaderboard`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success) {
+          setLeaderboard(data.leaderboard);
+          setRoomStatus(data.roomStatus);
+        }
+      } catch {}
+    };
+    fetchLB();
+    const id = setInterval(fetchLB, pollInterval);
+    return () => clearInterval(id);
+  }, [roomCode, pollInterval]);
+
+  return { leaderboard, roomStatus };
+};
+
+// Leaderboard display component
+const LeaderboardPanel = ({ roomCode }) => {
+  const { leaderboard, roomStatus } = useLeaderboard(roomCode);
+  if (!leaderboard || leaderboard.length === 0) return null;
+
+  return (
+    <div className="room-lb-panel">
+      <div className="room-lb-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5a2.5 2.5 0 0 1 0 5"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5a2.5 2.5 0 0 0 0 5"/><path d="M4 22h16"/><path d="M10 22V2l4 4v16"/>
+        </svg>
+        Live Leaderboard
+      </div>
+      <div className="room-lb-list">
+        {leaderboard.map((entry, i) => (
+          <div key={i} className={`room-lb-row ${i === 0 ? 'room-lb-row--lead' : ''}`}>
+            <span className="room-lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+            <div className="room-lb-info">
+              <span className="room-lb-name">{entry.name}</span>
+              <span className="room-lb-progress">{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
+            </div>
+            <span className="room-lb-score">{entry.points}<small>/{entry.maxPoints}</small></span>
+          </div>
+        ))}
+      </div>
+      <div className="room-lb-status">
+        Status: <strong>{roomStatus || 'N/A'}</strong>
+      </div>
+    </div>
+  );
+};
+
 const patchLiveRoom = async (code, updates) => {
   try {
     const res = await fetch(`${API_BASE}/api/live-rooms/${code.toUpperCase()}`, {
@@ -519,6 +582,8 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
             </div>
           )}
 
+          <LeaderboardPanel roomCode={room.roomCode} />
+
           <button id="start-session-btn" className="ip-btn-primary room-start-btn" onClick={onStartSession}>
             <StartIcon /> Start Session
           </button>
@@ -951,6 +1016,15 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
         return (a.score || 0) >= 50;
       }).length;
       const totalScore = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+      // Calculate difficulty-based points
+      let pointsEarned = 0;
+      let maxPoints = 0;
+      domainAnswers.forEach(a => {
+        const mp = getMaxPoints(a);
+        maxPoints += mp;
+        const pct = a.score || 0;
+        pointsEarned += Math.round((pct / 100) * mp);
+      });
       return {
         domain: dg.domain,
         questions: domainAnswers.map(a => ({
@@ -959,11 +1033,15 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
           score: a.score || 0,
           isCorrect: a.questionType === 'mcq' ? a.isCorrect === true : (a.score || 0) >= 50,
           difficulty: a.difficulty || 'Medium',
-          timeSpent: 0
+          timeSpent: 0,
+          maxPoints: getMaxPoints(a),
+          pointsEarned: Math.round(((a.score || 0) / 100) * getMaxPoints(a)),
         })),
         totalScore,
         totalQuestions,
         correctAnswers,
+        pointsEarned,
+        maxPoints,
         timeTaken: (dg.timeMinutes || 10) * 60,
         timeAllotted: (dg.timeMinutes || 10) * 60
       };
@@ -1032,6 +1110,18 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
                 <WarnIcon /> {sessionResult.violations.length} proctoring violation{sessionResult.violations.length !== 1 ? 's' : ''} were recorded during this session.
               </div>
             )}
+            {/* Points summary */}
+            {(() => {
+              const totalEarned = (sessionResult.domainResults || []).reduce((s, d) => s + (d.pointsEarned || 0), 0);
+              const totalMax = (sessionResult.domainResults || []).reduce((s, d) => s + (d.maxPoints || 0), 0);
+              if (totalMax === 0) return null;
+              return (
+                <div style={{ textAlign: 'center', margin: '1rem 0', padding: '1rem', background: 'rgba(99,102,241,0.08)', borderRadius: 12, border: '1px solid rgba(99,102,241,0.2)' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: 800, color: '#6366f1' }}>{totalEarned}<span style={{ fontSize: '1rem', color: 'var(--text-dim)', fontWeight: 400 }}>/{totalMax}</span></div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>points earned · {totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 0}%</div>
+                </div>
+              );
+            })()}
             {/* Full Analytics Dashboard */}
             {sessionResult.domainResults && sessionResult.domainResults.length > 0 && (
               <AnalyticsDashboard
