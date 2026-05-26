@@ -4,7 +4,7 @@ import MCQQuestion from './components/MCQQuestion';
 import CodeEditor from './components/CodeEditor';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import './components/AnalyticsDashboard.css';
-import { generateQuestions, isOllamaOnline } from './services/ollamaService';
+import { generateQuestions, isAiOnline } from './services/aiService';
 import { API_BASE } from './config/api.js';
 
 // Difficulty-based point values (must match backend)
@@ -629,7 +629,7 @@ const InterviewPage = ({ onGoHome }) => {
     const needed = Math.max(0, questionCount - localQs.length);
     if (needed > 0 || useAI) {
       try {
-        const online = await isOllamaOnline();
+        const online = await isAiOnline();
         if (!online) throw new Error('AI backend is offline');
         const generateCount = useAI ? questionCount : needed;
         const batchSize = 10;
@@ -653,7 +653,7 @@ const InterviewPage = ({ onGoHome }) => {
         console.warn('[Practice] AI generation error:', err.message);
         // If MCQ was selected and AI failed, there are no local MCQs
         if (questionType === 'mcq' && localQs.length === 0) {
-          alert('MCQ questions require AI generation. Please make sure Ollama is running (ollama serve) and try again.');
+          alert('MCQ questions require AI generation. Please make sure the AI backend is reachable and try again.');
           setAiLoading(false);
           return;
         }

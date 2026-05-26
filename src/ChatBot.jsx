@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { chatCompletion, isOllamaOnline } from './services/ollamaService';
+import { chatCompletion, isAiOnline } from './services/aiService';
 
 // ============================================================
-// Verge1.o — Local Offline AI Assistant (Ollama LLaMa-3)
+// Verge1.o — AI Assistant
 // ============================================================
 
-const SYSTEM_PROMPT = `You are Verge1.o, an elite CS interview coach and technical assistant built into the MockMate platform. You are powered by a local LLaMa-3 neural network running on the user's own hardware.
+const SYSTEM_PROMPT = `You are Verge1.o, an elite CS interview coach and technical assistant built into the MockMate platform. You are powered by an advanced AI model.
 
 Your personality:
 - Precise, authoritative, and technically brilliant
@@ -31,7 +31,7 @@ When asked to explain concepts, teach like a world-class professor.`;
 const INITIAL_MESSAGE = {
   id: 'init',
   from: 'bot',
-  text: "Verge1.o online. Neural systems initialized.\n\nI am your local AI interview coach — powered by LLaMa-3 running directly on your hardware. Zero cloud dependency. Full privacy.\n\nI can help you with:\n• Deep CS concept explanations\n• Mock interview question generation\n• Code review & debugging\n• System design walkthroughs\n• Algorithm optimization strategies\n\nWhat would you like to work on?",
+  text: "Verge1.o online. Systems initialized.\n\nI am your AI interview coach. I can help you with:\n• Deep CS concept explanations\n• Mock interview question generation\n• Code review & debugging\n• System design walkthroughs\n• Algorithm optimization strategies\n\nWhat would you like to work on?",
   ts: new Date(),
 };
 
@@ -44,14 +44,14 @@ const SUGGESTED = [
   'What is the CAP theorem?',
 ];
 
-// Fallback KB for when Ollama is offline
+// Fallback KB for when AI is offline
 const OFFLINE_KB = [
-  { pattern: /big.?o|time complexity|space complexity/i, answer: "Common Big-O complexities (best → worst):\n\n• O(1) — Constant: hash lookup, array access\n• O(log n) — Logarithmic: binary search\n• O(n) — Linear: linear search, traversal\n• O(n log n) — Merge sort, heap sort\n• O(n²) — Bubble/insertion sort (worst)\n• O(2ⁿ) — Exponential: naive recursion\n\n[Verge1.o Offline Mode — start Ollama for full AI responses]" },
-  { pattern: /deadlock/i, answer: "Deadlock — 4 Necessary Conditions:\n\n1. Mutual Exclusion\n2. Hold & Wait\n3. No Preemption\n4. Circular Wait\n\nPrevention: break any one condition.\nAvoidance: Banker's Algorithm.\n\n[Verge1.o Offline Mode — start Ollama for full AI responses]" },
-  { pattern: /acid/i, answer: "ACID Properties:\n\n• Atomicity: all-or-nothing\n• Consistency: valid state transitions\n• Isolation: concurrent txns don't interfere\n• Durability: committed data survives crashes\n\n[Verge1.o Offline Mode — start Ollama for full AI responses]" },
-  { pattern: /tcp.*udp|udp.*tcp/i, answer: "TCP: Connection-oriented, reliable, ordered. Used for HTTP, email.\nUDP: Connectionless, fast, no guarantees. Used for DNS, gaming, streaming.\n\n[Verge1.o Offline Mode — start Ollama for full AI responses]" },
-  { pattern: /solid/i, answer: "SOLID Principles:\n\n• S — Single Responsibility\n• O — Open/Closed\n• L — Liskov Substitution\n• I — Interface Segregation\n• D — Dependency Inversion\n\n[Verge1.o Offline Mode — start Ollama for full AI responses]" },
-  { pattern: /cap theorem|cap\b/i, answer: "CAP Theorem: In a distributed system, pick 2 of 3:\n\n• Consistency — every read = latest write\n• Availability — every request gets a response\n• Partition Tolerance — survives network splits\n\nCP: MongoDB. AP: Cassandra. CA: Traditional RDBMS.\n\n[Verge1.o Offline Mode — start Ollama for full AI responses]" },
+  { pattern: /big.?o|time complexity|space complexity/i, answer: "Common Big-O complexities (best → worst):\n\n• O(1) — Constant: hash lookup, array access\n• O(log n) — Logarithmic: binary search\n• O(n) — Linear: linear search, traversal\n• O(n log n) — Merge sort, heap sort\n• O(n²) — Bubble/insertion sort (worst)\n• O(2ⁿ) — Exponential: naive recursion\n\n[Verge1.o Offline Mode]" },
+  { pattern: /deadlock/i, answer: "Deadlock — 4 Necessary Conditions:\n\n1. Mutual Exclusion\n2. Hold & Wait\n3. No Preemption\n4. Circular Wait\n\nPrevention: break any one condition.\nAvoidance: Banker's Algorithm.\n\n[Verge1.o Offline Mode]" },
+  { pattern: /acid/i, answer: "ACID Properties:\n\n• Atomicity: all-or-nothing\n• Consistency: valid state transitions\n• Isolation: concurrent txns don't interfere\n• Durability: committed data survives crashes\n\n[Verge1.o Offline Mode]" },
+  { pattern: /tcp.*udp|udp.*tcp/i, answer: "TCP: Connection-oriented, reliable, ordered. Used for HTTP, email.\nUDP: Connectionless, fast, no guarantees. Used for DNS, gaming, streaming.\n\n[Verge1.o Offline Mode]" },
+  { pattern: /solid/i, answer: "SOLID Principles:\n\n• S — Single Responsibility\n• O — Open/Closed\n• L — Liskov Substitution\n• I — Interface Segregation\n• D — Dependency Inversion\n\n[Verge1.o Offline Mode]" },
+  { pattern: /cap theorem|cap\b/i, answer: "CAP Theorem: In a distributed system, pick 2 of 3:\n\n• Consistency — every read = latest write\n• Availability — every request gets a response\n• Partition Tolerance — survives network splits\n\nCP: MongoDB. AP: Cassandra. CA: Traditional RDBMS.\n\n[Verge1.o Offline Mode]" },
 ];
 
 function getOfflineResponse(input) {
@@ -67,15 +67,15 @@ export default function ChatBot() {
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
   const [unread, setUnread] = useState(0);
-  const [ollamaStatus, setOllamaStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
+  const [aiStatus, setAiStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Check Ollama connectivity on mount and periodically
+  // Check AI connectivity on mount and periodically
   useEffect(() => {
     const check = async () => {
-      const online = await isOllamaOnline();
-      setOllamaStatus(online ? 'online' : 'offline');
+      const online = await isAiOnline();
+      setAiStatus(online ? 'online' : 'offline');
     };
     check();
     const interval = setInterval(check, 15000);
@@ -104,18 +104,18 @@ export default function ChatBot() {
     setTyping(true);
 
     try {
-      if (ollamaStatus !== 'online') {
+      if (aiStatus !== 'online') {
         // Try one more time in case it just came online
-        const online = await isOllamaOnline();
+        const online = await isAiOnline();
         if (online) {
-          setOllamaStatus('online');
+          setAiStatus('online');
         } else {
           throw new Error('offline');
         }
       }
 
-      // Build conversation history for Ollama
-      const ollamaMessages = [
+      // Build conversation history
+      const aiMessages = [
         { role: 'system', content: SYSTEM_PROMPT },
         ...history
           .filter(m => m.id !== 'init')
@@ -125,7 +125,7 @@ export default function ChatBot() {
           }))
       ];
 
-      const answer = await chatCompletion(ollamaMessages, { temperature: 0.7 });
+      const answer = await chatCompletion(aiMessages, { temperature: 0.7 });
       const botMsg = { id: Date.now() + 1, from: 'bot', text: answer || 'No response generated.', ts: new Date() };
       setMessages(prev => [...prev, botMsg]);
     } catch (err) {
@@ -133,7 +133,7 @@ export default function ChatBot() {
       const fallback = getOfflineResponse(q);
       const botMsg = { id: Date.now() + 1, from: 'bot', text: fallback, ts: new Date() };
       setMessages(prev => [...prev, botMsg]);
-      setOllamaStatus('offline');
+      setAiStatus('offline');
     }
 
     setTyping(false);
@@ -150,8 +150,8 @@ export default function ChatBot() {
   const formatText = (text) =>
     text.split('\n').map((line, i) => <span key={i}>{line}<br /></span>);
 
-  const statusColor = ollamaStatus === 'online' ? '#22c55e' : ollamaStatus === 'checking' ? '#eab308' : '#ef4444';
-  const statusLabel = ollamaStatus === 'online' ? 'LLaMa-3 Online' : ollamaStatus === 'checking' ? 'Connecting...' : 'Offline Mode';
+  const statusColor = aiStatus === 'online' ? '#22c55e' : aiStatus === 'checking' ? '#eab308' : '#ef4444';
+  const statusLabel = aiStatus === 'online' ? 'AI Online' : aiStatus === 'checking' ? 'Connecting...' : 'Offline Mode';
 
   return (
     <>
@@ -253,7 +253,7 @@ export default function ChatBot() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder={ollamaStatus === 'online' ? "Ask Verge1.o anything..." : "Verge1.o (offline mode)..."}
+              placeholder={aiStatus === 'online' ? "Ask Verge1.o anything..." : "Verge1.o (offline mode)..."}
               rows={1}
               aria-label="Type your question"
             />

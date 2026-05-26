@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { API_BASE } from '../config/api.js';
-import { analyzeCode, isOllamaOnline } from '../services/ollamaService';
+import { analyzeCode, isAiOnline } from '../services/aiService';
 
 // ── Icons ─────────────────────────────────────────────────────
 const PlayIcon = () => (
@@ -60,16 +60,16 @@ function runJavaScript(code, input) {
 // AI-powered code analysis for non-JS languages (replaces mock runner)
 async function aiRun(language, code, problemStatement, testCases) {
   try {
-    const online = await isOllamaOnline();
+    const online = await isAiOnline();
     if (!online) {
-      // Fallback: return placeholder results when Ollama is offline
+      // Fallback: return placeholder results when AI is offline
       return testCases.map((tc) => ({
         passed: false,
         input: tc.input,
         expectedOutput: tc.expectedOutput,
-        actualOutput: '[Verge1.o Offline] Start Ollama to enable AI compilation',
+        actualOutput: '[Verge1.o Offline] AI compilation not available',
         executionTime: 0,
-        error: 'Ollama AI engine not running. Start it with: ollama serve',
+        error: 'AI engine not reachable',
       }));
     }
 

@@ -5,7 +5,7 @@ import ProctoringMonitor from './components/ProctoringMonitor';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import './components/AnalyticsDashboard.css';
 import { CATEGORIES, questions } from './data/questions';
-import { generateQuestions, isOllamaOnline } from './services/ollamaService';
+import { generateQuestions, isAiOnline } from './services/aiService';
 import { API_BASE } from './config/api.js';
 
 // ── Icons ───────────────────────────────────────────────────
@@ -130,6 +130,9 @@ const LeaderboardPanel = ({ roomCode }) => {
   const { leaderboard, roomStatus } = useLeaderboard(roomCode);
   if (!leaderboard || leaderboard.length === 0) return null;
 
+  const TOP_N = 10;
+  const showEntries = leaderboard.slice(0, TOP_N);
+  const remaining = leaderboard.length - TOP_N;
   const barColor = (i) => i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#d97706' : '#6366f1';
 
   return (
@@ -137,28 +140,35 @@ const LeaderboardPanel = ({ roomCode }) => {
       <div className="room-lb-header">
         <span className="room-lb-live" />
         Live Leaderboard
-        <span className="room-lb-count">{leaderboard.length} participant{leaderboard.length !== 1 ? 's' : ''}</span>
+        <span className="room-lb-count">{leaderboard.length} candidate{leaderboard.length !== 1 ? 's' : ''}</span>
       </div>
-      {leaderboard.map((entry, i) => (
-        <div key={entry.participantId || i} className={`room-lb-row ${i === 0 ? 'room-lb-row--lead' : ''}`}>
-          <span className="room-lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
-          <div className="room-lb-info">
-            <div className="room-lb-name-row">
-              <span className="room-lb-name">{entry.name}</span>
-              {entry.status === 'completed' && <span className="room-lb-badge room-lb-badge--done">✓</span>}
-              {entry.status === 'active' && <span className="room-lb-badge room-lb-badge--live">●</span>}
+      <div className="room-lb-rows">
+        {showEntries.map((entry, i) => (
+          <div key={entry.participantId || i} className={`room-lb-row ${i === 0 ? 'room-lb-row--lead' : ''}`}>
+            <span className="room-lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+            <div className="room-lb-info">
+              <div className="room-lb-name-row">
+                <span className="room-lb-name">{entry.name}</span>
+                {entry.status === 'completed' && <span className="room-lb-badge room-lb-badge--done">✓</span>}
+                {entry.status === 'active' && <span className="room-lb-badge room-lb-badge--live">●</span>}
+              </div>
+              <div className="room-lb-bar-track">
+                <div className="room-lb-bar-fill" style={{ width: `${entry.percentage}%`, background: barColor(i) }} />
+              </div>
+              <span className="room-lb-progress">{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
             </div>
-            <div className="room-lb-bar-track">
-              <div className="room-lb-bar-fill" style={{ width: `${entry.percentage}%`, background: barColor(i) }} />
+            <div className="room-lb-score-col">
+              <span className="room-lb-score">{entry.percentage}%</span>
+              <span className="room-lb-score-sub">{entry.points}/{entry.maxPoints}</span>
             </div>
-            <span className="room-lb-progress">{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
           </div>
-          <div className="room-lb-score-col">
-            <span className="room-lb-score">{entry.percentage}%</span>
-            <span className="room-lb-score-sub">{entry.points}/{entry.maxPoints}</span>
+        ))}
+        {remaining > 0 && (
+          <div className="room-lb-more">
+            + {remaining} more candidate{remaining !== 1 ? 's' : ''} — use <strong>Projector View</strong> for full list
           </div>
-        </div>
-      ))}
+        )}
+      </div>
       <div className="room-lb-status">
         Status: <strong>{roomStatus || 'N/A'}</strong>
       </div>
@@ -166,46 +176,88 @@ const LeaderboardPanel = ({ roomCode }) => {
   );
 };
 
-// Projector view — full-screen leaderboard for auditorium projection
+// Projector view — virtual-scrolled leaderboard for any number of candidates
 const ProjectorView = ({ roomCode, onBack }) => {
   const { leaderboard, roomStatus } = useLeaderboard(roomCode);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const containerRef = useRef(null);
+  const ROW_H = 68;       // fixed row height in px
+  const BUFFER = 10;       // extra rows above/below viewport
+  const HEADER_H = 52;     // table header height
+
+  const total = leaderboard ? leaderboard.length : 0;
+  const totalH = total * ROW_H;
+
+  // Visible window
+  const viewH = typeof window !== 'undefined' ? window.innerHeight - 220 : 600; // viewport minus header/footer
+  const startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER);
+  const endIdx = Math.min(total, Math.ceil((scrollTop + viewH) / ROW_H) + BUFFER);
+  const visible = leaderboard ? leaderboard.slice(startIdx, endIdx) : [];
+
+  const onScroll = (e) => {
+    const t = e.target.scrollTop;
+    setScrollTop(t);
+    if (autoScroll && containerRef.current) {
+      const nearBottom = containerRef.current.scrollHeight - t - containerRef.current.clientHeight < 100;
+      if (!nearBottom) setAutoScroll(false);
+    }
+  };
+
+  // Auto-scroll to bottom when new entries arrive and autoScroll is on
+  useEffect(() => {
+    if (!autoScroll || !containerRef.current) return;
+    containerRef.current.scrollTop = containerRef.current.scrollHeight;
+  }, [leaderboard, autoScroll]);
+
+  const barColor = (i) => i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#d97706' : '#6366f1';
 
   return (
     <div className="projector-root">
-      <button className="projector-exit" onClick={onBack}>✕ Exit Projection</button>
+      <div className="projector-topbar">
+        <button className="projector-exit" onClick={onBack}>✕ Exit</button>
+        <span className="projector-total">{total} candidate{total !== 1 ? 's' : ''}</span>
+        <button className="projector-toggle" onClick={() => { setAutoScroll(!autoScroll); if (!autoScroll && containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight; }}>
+          {autoScroll ? '⏸ Pause' : '▶ Auto-Scroll'}
+        </button>
+      </div>
 
       <div className="projector-header">
         <div className="projector-title">Live Leaderboard</div>
         <div className="projector-room">Room: {roomCode}</div>
       </div>
 
-      {(!leaderboard || leaderboard.length === 0) ? (
+      {total === 0 ? (
         <div className="projector-empty">
           <div className="projector-empty-icon">🏆</div>
-          <div className="projector-empty-text">Waiting for participants...</div>
-          <div className="projector-empty-sub">As candidates join and answer, the leaderboard will appear here.</div>
+          <div className="projector-empty-text">Waiting for candidates...</div>
+          <div className="projector-empty-sub">As candidates join and submit answers, rankings will appear here in real time.</div>
         </div>
       ) : (
-        <div className="projector-body">
-          <div className="projector-table">
-            <div className="projector-table-header">
+        <div className="projector-body" ref={containerRef} onScroll={onScroll}>
+          <div className="projector-table" style={{ height: totalH + HEADER_H, position: 'relative' }}>
+            <div className="projector-table-header" style={{ position: 'sticky', top: 0, zIndex: 2 }}>
               <div className="projector-th-rank">Rank</div>
-              <div className="projector-th-name">Participant</div>
+              <div className="projector-th-name">Candidate</div>
               <div className="projector-th-progress">Progress</div>
               <div className="projector-th-score">Score</div>
             </div>
-            {leaderboard.map((entry, i) => {
-              const barWidth = entry.percentage;
-              const barColor = i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#d97706' : '#6366f1';
+            {visible.map((entry, vi) => {
+              const i = startIdx + vi;
               return (
-                <div key={entry.participantId || i} className={`projector-row ${i === 0 ? 'projector-row--first' : ''}`}>
+                <div key={entry.participantId || i} className={`projector-row ${i === 0 ? 'projector-row--first' : ''}`}
+                  style={{ position: 'absolute', top: HEADER_H + i * ROW_H, left: 0, right: 0, height: ROW_H - 4 }}>
                   <div className="projector-rank">
                     <span className="projector-rank-num">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
                   </div>
-                  <div className="projector-name">{entry.name}</div>
+                  <div className="projector-name">
+                    {entry.name}
+                    {entry.status === 'completed' && <span className="projector-name-badge projector-name-badge--done">✓</span>}
+                    {entry.status === 'active' && <span className="projector-name-badge projector-name-badge--live">●</span>}
+                  </div>
                   <div className="projector-progress">
                     <div className="projector-bar-track">
-                      <div className="projector-bar-fill" style={{ width: `${barWidth}%`, background: barColor }} />
+                      <div className="projector-bar-fill" style={{ width: `${entry.percentage}%`, background: barColor(i) }} />
                     </div>
                     <span className="projector-bar-label">{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
                   </div>
@@ -221,7 +273,7 @@ const ProjectorView = ({ roomCode, onBack }) => {
       )}
 
       <div className="projector-footer">
-        Status: <strong>{roomStatus || '—'}</strong>
+        <span className="projector-footer-live" /> Updating live · <strong>{total}</strong> candidate{total !== 1 ? 's' : ''} · Status: <strong>{roomStatus || '—'}</strong>
       </div>
     </div>
   );
@@ -272,13 +324,13 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
   const [aiQuestions, setAiQuestions] = useState([]);
   const [aiError, setAiError] = useState('');
 
-  // Generate questions with Ollama AI
+  // Generate questions with AI
   const handleAIGenerate = async () => {
     if (selectedCat === 'leetcode-live') return;
     setAiGenerating(true);
     setAiError('');
     try {
-      const online = await isOllamaOnline();
+      const online = await isAiOnline();
       if (!online) throw new Error('AI service is currently unavailable. Please try again later.');
       const newQs = await generateQuestions(selectedCat, 10, null, questionTypeFilter);
       setAiQuestions(prev => [...prev, ...newQs]);
@@ -550,7 +602,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
 // ════════════════════════════════════════════════════════════
 //  LOBBY (After room is created — interviewer waiting view)
 // ════════════════════════════════════════════════════════════
-const InterviewerLobby = ({ room, onStartSession, onProject, onBack }) => {
+const InterviewerLobby = ({ room, onStartSession, onProject, onResults, onBack }) => {
   const [copied, setCopied] = useState(false);
   const [reviveRequests, setReviveRequests] = useState([]);
   const [candidateConnected, setCandidateConnected] = useState(room.status === 'active');
@@ -665,7 +717,7 @@ const InterviewerLobby = ({ room, onStartSession, onProject, onBack }) => {
             )}
             {roomStatus === 'completed' && (
               <div className="room-info-row" style={{ color: '#6366f1', fontWeight: 600, marginTop: '0.5rem' }}>
-                Session completed
+                Session completed — all candidates submitted
               </div>
             )}
           </div>
@@ -700,6 +752,11 @@ const InterviewerLobby = ({ room, onStartSession, onProject, onBack }) => {
           <button id="project-btn" className="ip-btn-ghost room-project-btn" onClick={onProject}>
             🖥 Projector View
           </button>
+          {roomStatus === 'completed' && (
+            <button id="results-btn" className="ip-btn-primary" style={{ marginTop: 8 }} onClick={onResults}>
+              📊 Final Results & Download
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1251,11 +1308,12 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
         )}
 
         {view === 'create' && <CreateRoom onRoomCreated={handleRoomCreated} onBack={() => setView('select')} />}
-        {view === 'lobby'  && room && <InterviewerLobby room={room} onStartSession={() => setView('live')} onProject={() => setView('projector')} onBack={() => setView('create')} />}
+        {view === 'lobby'  && room && <InterviewerLobby room={room} onStartSession={() => setView('live')} onProject={() => setView('projector')} onResults={() => setView('results')} onBack={() => setView('create')} />}
         {view === 'join'   && <JoinRoom onJoined={handleJoined} onBack={() => setView('select')} />}
         {view === 'live'   && room && <LiveSession room={room} onComplete={handleSessionComplete} />}
 
         {view === 'projector' && room && <ProjectorView roomCode={room.roomCode} onBack={() => setView('lobby')} />}
+        {view === 'results'  && room && <FinalResults roomCode={room.roomCode} onBack={() => setView('lobby')} />}
 
         {view === 'done' && sessionResult && (
           <div className="room-done animate-fade-in-up">
@@ -1297,5 +1355,85 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
   );
 };
 
-export { ProjectorView };
+// ── Final Results ─────────────────────────────────────────────
+const FinalResults = ({ roomCode, onBack }) => {
+  const { leaderboard } = useLeaderboard(roomCode);
+  const total = leaderboard ? leaderboard.length : 0;
+  const completed = leaderboard ? leaderboard.filter(e => e.status === 'completed').length : 0;
+  const avgPct = leaderboard && total > 0 ? Math.round(leaderboard.reduce((s, e) => s + e.percentage, 0) / total) : 0;
+
+  const downloadCSV = () => {
+    if (!leaderboard) return;
+    const header = 'Rank,Name,Email,Points,MaxPoints,Percentage,QuestionsAnswered,TotalQuestions,Status\n';
+    const rows = leaderboard.map((e, i) =>
+      `${i + 1},"${e.name}","${e.email}",${e.points},${e.maxPoints},${e.percentage},${e.questionsAnswered},${e.totalQuestions},${e.status}`
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `results-${roomCode}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const downloadJSON = () => {
+    if (!leaderboard) return;
+    const blob = new Blob([JSON.stringify({ roomCode, exportedAt: new Date().toISOString(), leaderboard }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `results-${roomCode}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const barColor = (i) => i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#d97706' : '#6366f1';
+
+  return (
+    <div className="projector-root">
+      <div className="projector-topbar">
+        <button className="projector-exit" onClick={onBack}>✕ Back</button>
+        <span className="projector-total">Final Results · {completed}/{total} completed</span>
+        <button className="projector-toggle" onClick={downloadCSV}>⬇ CSV</button>
+        <button className="projector-toggle" onClick={downloadJSON}>⬇ JSON</button>
+      </div>
+
+      <div className="projector-header" style={{ padding: '1rem 1rem 0.6rem' }}>
+        <div className="projector-title">🏆 Final Leaderboard</div>
+        <div className="projector-room">Room: {roomCode} · Avg: {avgPct}% · {total} candidate{total !== 1 ? 's' : ''}</div>
+      </div>
+
+      {(!leaderboard || total === 0) ? (
+        <div className="projector-empty">
+          <div className="projector-empty-icon">📊</div>
+          <div className="projector-empty-text">No results yet</div>
+        </div>
+      ) : (
+        <div className="projector-body">
+          <div className="projector-table" style={{ maxWidth: 1000, margin: '0 auto' }}>
+            {leaderboard.map((entry, i) => (
+              <div key={entry.participantId || i} className={`projector-row ${i === 0 ? 'projector-row--first' : ''}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', marginBottom: 4, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12 }}>
+                <div className="projector-rank">
+                  <span className="projector-rank-num">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+                </div>
+                <div className="projector-name" style={{ flex: 2, fontSize: '1.1rem', fontWeight: 600 }}>
+                  {entry.name}
+                  {entry.status === 'completed' && <span className="projector-name-badge projector-name-badge--done" style={{ marginLeft: 8 }}>✓</span>}
+                </div>
+                <div className="projector-progress" style={{ flex: 3, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="projector-bar-track" style={{ flex: 1, height: 16, background: 'rgba(255,255,255,0.08)', borderRadius: 8, overflow: 'hidden' }}>
+                    <div className="projector-bar-fill" style={{ width: `${entry.percentage}%`, height: '100%', borderRadius: 8, background: barColor(i), transition: 'width 0.4s ease' }} />
+                  </div>
+                  <span className="projector-bar-label" style={{ fontSize: '0.8rem', color: '#9ca3af', whiteSpace: 'nowrap', width: 70, textAlign: 'right' }}>{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
+                </div>
+                <div className="projector-score" style={{ width: 110, textAlign: 'right', flexShrink: 0 }}>
+                  <span className="projector-score-val" style={{ fontSize: '1.2rem', fontWeight: 800, color: '#a5b4fc', display: 'block', lineHeight: 1.2 }}>{entry.percentage}%</span>
+                  <span className="projector-score-pts" style={{ fontSize: '0.7rem', color: '#6b7280' }}>{entry.points}/{entry.maxPoints} pts</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export { ProjectorView, FinalResults };
 export default InterviewRoom;

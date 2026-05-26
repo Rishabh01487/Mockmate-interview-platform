@@ -122,7 +122,7 @@ const feedbackSchema = new mongoose.Schema(
     // ── AI metadata ─────────────────────────────────────────
     generatedBy: {
       type: String,
-      enum: ['mock', 'gpt-3.5', 'gpt-4', 'gemini', 'ollama', 'other'],
+      enum: ['mock', 'gpt-3.5', 'gpt-4', 'gemini', 'other'],
       default: 'mock',
       // Track which AI model generated this feedback
     },

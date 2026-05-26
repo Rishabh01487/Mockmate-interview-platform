@@ -494,29 +494,18 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-//  Verge1.o — AI Proxy (auto-detects Ollama or OpenAI format)
-//  Ollama cloud:   set OLLAMA_API_URL + OLLAMA_API_KEY
-//  OpenAI-compat:  set AI_API_URL + AI_API_KEY + AI_MODEL
+//  AI Proxy — OpenAI-compatible (set AI_API_URL + AI_API_KEY + AI_MODEL)
 // ════════════════════════════════════════════════════════════
-const OLLAMA_URL = (process.env.OLLAMA_API_URL || '').trim();
-const OLLAMA_KEY = (process.env.OLLAMA_API_KEY || '').trim();
-const OAI_URL    = (process.env.AI_API_URL || '').trim();
-const OAI_KEY    = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL   = (process.env.AI_MODEL || 'gemma3:12b').trim();
+const AI_BASE_URL = (process.env.AI_API_URL || 'https://api.openai.com/v1').trim().replace(/\/$/, '');
+const AI_KEY = (process.env.AI_API_KEY || '').trim();
+const AI_MODEL = (process.env.AI_MODEL || 'gpt-4o-mini').trim();
 
-// Use Ollama native format if OLLAMA_API_URL is set (and not overridden by AI_API_URL)
-const USE_OLLAMA = !!OLLAMA_URL && !OAI_URL;
-const AI_BASE_URL = USE_OLLAMA
-  ? OLLAMA_URL.replace(/\/$/, '')
-  : (OAI_URL || 'http://localhost:11434/v1').replace(/\/$/, '');
-const AI_KEY = USE_OLLAMA ? OLLAMA_KEY : OAI_KEY;
+console.log(`✓ AI Provider → ${AI_BASE_URL} (model: ${AI_MODEL})`);
 
-console.log(`✓ AI Provider: ${USE_OLLAMA ? 'Ollama Native' : 'OpenAI-Compatible'} → ${AI_BASE_URL} (model: ${AI_MODEL})`);
-
-// Health check — works for both Ollama and OpenAI providers
+// Health check — verify AI provider is reachable
 app.get('/api/ai/health', async (req, res) => {
   try {
-    const checkUrl = USE_OLLAMA ? `${AI_BASE_URL}/api/tags` : `${AI_BASE_URL}/models`;
+    const checkUrl = `${AI_BASE_URL}/models`;
     const check = await fetch(checkUrl, {
       headers: { 'Authorization': `Bearer ${AI_KEY}`, 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(8000)
@@ -539,39 +528,21 @@ app.post('/api/ai/chat', async (req, res) => {
     const useModel = model || AI_MODEL;
     let response, aiContent = '';
 
-    if (USE_OLLAMA) {
-      console.log(`[AI Chat] Ollama → model=${useModel}, msgs=${messages?.length}`);
-      response = await fetch(`${AI_BASE_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
-        body: JSON.stringify({ model: useModel, messages, stream: false, options: { temperature } }),
-        signal: AbortSignal.timeout(120000)
-      });
-      if (!response.ok) {
-        const errBody = await response.text();
-        console.error(`[AI Chat] Ollama error ${response.status}: ${errBody.slice(0, 500)}`);
-        return res.status(response.status).json({ error: errBody });
-      }
-      const data = await response.json();
-      aiContent = data.message?.content || '';
-      res.json({ message: data.message || { content: '', role: 'assistant' } });
-    } else {
-      console.log(`[AI Chat] OpenAI-compat → model=${useModel}, msgs=${messages?.length}`);
-      response = await fetch(`${AI_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
-        body: JSON.stringify({ model: useModel, messages, temperature, max_tokens: 4096, stream: false }),
-        signal: AbortSignal.timeout(120000)
-      });
-      if (!response.ok) {
-        const errBody = await response.text();
-        console.error(`[AI Chat] OpenAI-compat error ${response.status}: ${errBody.slice(0, 500)}`);
-        return res.status(response.status).json({ error: errBody });
-      }
-      const data = await response.json();
-      aiContent = data.choices?.[0]?.message?.content || '';
-      res.json({ message: { content: aiContent, role: 'assistant' } });
+    console.log(`[AI Chat] → model=${useModel}, msgs=${messages?.length}`);
+    response = await fetch(`${AI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
+      body: JSON.stringify({ model: useModel, messages, temperature, max_tokens: 4096, stream: false }),
+      signal: AbortSignal.timeout(120000)
+    });
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error(`[AI Chat] error ${response.status}: ${errBody.slice(0, 500)}`);
+      return res.status(response.status).json({ error: errBody });
     }
+    const data = await response.json();
+    aiContent = data.choices?.[0]?.message?.content || '';
+    res.json({ message: { content: aiContent, role: 'assistant' } });
 
     // ── Log to training data (non-blocking) ──
     const userMsg = messages?.find(m => m.role === 'user')?.content || '';

@@ -11,11 +11,11 @@ services:
       - key: JWT_SECRET
         sync: false          # Set in Render dashboard → any long random string
       - key: AI_API_URL
-        value: https://ollama.com/v1
+        value: https://api.openai.com/v1
       - key: AI_API_KEY
-        sync: false          # Set in Render dashboard → your Ollama cloud API key
+        value: sk-2eb60e010747407795d24dbf5516197b
       - key: AI_MODEL
-        value: openai/gpt-oss-120b
+        value: gpt-4o-mini
       - key: CLIENT_URL
         sync: false          # Set in Render dashboard → your Vercel frontend URL
     healthCheckPath: /api/health

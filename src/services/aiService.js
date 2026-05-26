@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════
-//  Verge1.o — Cloud AI Service Layer
+//  AI Service Layer
 //  Dev:  calls go to http://localhost:5000 via Vite proxy
 //  Prod: calls go to https://your-backend.onrender.com
 // ════════════════════════════════════════════════════════════
@@ -10,7 +10,7 @@ const AI_BASE = `${API_BASE}/api/ai`;
 /**
  * Check if the AI backend is reachable and API key is configured
  */
-export async function isOllamaOnline() {
+export async function isAiOnline() {
   try {
     const res = await fetch(`${AI_BASE}/health`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return false;
