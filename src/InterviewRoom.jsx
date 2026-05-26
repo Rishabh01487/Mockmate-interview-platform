@@ -189,6 +189,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
   const [tabSwitchLimit, setTabSwitchLimit] = useState(1);
   const [selectedQs, setSelectedQs] = useState([]);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
 
   const [selectedCat, setSelectedCat] = useState('dsa');
   const [questionTypeFilter, setQuestionTypeFilter] = useState('all');
@@ -280,6 +281,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
   const handleCreate = async () => {
     if (!selectedQs.length) return;
     setCreating(true);
+    setCreateError('');
     try {
       const code = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
       const groups = {};
@@ -303,10 +305,16 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
         scores: { overall: 0, mcq: 0, coding: 0, text: 0 },
         candidateAnswers: [],
       };
-      await postLiveRoom(room);
+      const result = await postLiveRoom(room);
+      if (!result.success) {
+        setCreateError(result.message || 'Failed to create room on server');
+        setCreating(false);
+        return;
+      }
       onRoomCreated(room);
     } catch (err) {
       console.error('Failed to create room:', err);
+      setCreateError(err.message || 'Unexpected error');
     }
     setCreating(false);
   };
@@ -358,6 +366,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
               onClick={handleCreate} disabled={!selectedQs.length || creating}>
               {creating ? 'Creating…' : <><CheckIcon /> Create Room ({selectedQs.length} question{selectedQs.length !== 1 ? 's' : ''})</>}
             </button>
+            {createError && <p style={{ color:'#ef4444', fontSize:'0.82rem', marginTop:'0.5rem' }}>⚠ {createError}</p>}
           </div>
 
           {/* Selected Questions by Domain Summary */}
