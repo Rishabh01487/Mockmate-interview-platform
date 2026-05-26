@@ -496,9 +496,9 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  AI Proxy — OpenAI-compatible (set AI_API_URL + AI_API_KEY + AI_MODEL)
 // ════════════════════════════════════════════════════════════
-const AI_BASE_URL = (process.env.AI_API_URL || 'https://api.openai.com/v1').trim().replace(/\/$/, '');
+const AI_BASE_URL = (process.env.AI_API_URL || 'https://api.deepseek.com/v1').trim().replace(/\/$/, '');
 const AI_KEY = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL = (process.env.AI_MODEL || 'gpt-4o-mini').trim();
+const AI_MODEL = (process.env.AI_MODEL || 'deepseek-chat').trim();
 
 console.log(`✓ AI Provider → ${AI_BASE_URL} (model: ${AI_MODEL})`);
 
