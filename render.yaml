@@ -3,7 +3,6 @@ services:
     name: mockmate-backend
     runtime: node
     buildCommand: cd backend && npm install && cd .. && npm run build
-    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -20,4 +19,3 @@ services:
       - key: CLIENT_URL
         sync: false          # Set in Render dashboard → your Vercel frontend URL
     healthCheckPath: /api/health
-s
