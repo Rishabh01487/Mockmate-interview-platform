@@ -486,6 +486,7 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
   const [reviveRequests, setReviveRequests] = useState([]);
   const [candidateConnected, setCandidateConnected] = useState(room.status === 'active');
   const [roomStatus, setRoomStatus] = useState(room.status);
+  const { leaderboard } = useLeaderboard(room.roomCode);
 
   const copyCode = () => {
     navigator.clipboard.writeText(room.roomCode).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
