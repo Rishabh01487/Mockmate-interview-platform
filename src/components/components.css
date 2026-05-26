@@ -629,6 +629,103 @@
 .room-lb-status strong { color: var(--text-primary); text-transform: capitalize; }
 
 /* Responsive */
+/* ── Projector Leaderboard (Auditorium) ───────────────────── */
+.projector-root {
+  position: fixed; inset: 0; z-index: 99999;
+  display: flex; flex-direction: column;
+  background: linear-gradient(135deg, #0a0a12 0%, #111118 50%, #0d0d1a 100%);
+  color: #e5e7eb;
+  animation: fadeIn 0.3s ease;
+}
+.projector-exit {
+  position: fixed; top: 12px; right: 16px; z-index: 10;
+  background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3);
+  color: #fca5a5; padding: 6px 16px; border-radius: 8px;
+  font-size: 0.8rem; cursor: pointer;
+}
+.projector-exit:hover { background: rgba(239,68,68,0.25); }
+.projector-header {
+  text-align: center; padding: 2rem 1rem 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.projector-title {
+  font-size: 2.2rem; font-weight: 800;
+  background: linear-gradient(135deg, #6366f1, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+.projector-room {
+  font-size: 0.9rem; color: #6b7280; margin-top: 4px;
+  font-family: monospace; letter-spacing: 1px;
+}
+.projector-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  color: #6b7280;
+}
+.projector-empty-icon { font-size: 4rem; }
+.projector-empty-text { font-size: 1.8rem; font-weight: 600; color: #9ca3af; }
+.projector-empty-sub { font-size: 1rem; color: #6b7280; max-width: 400px; text-align: center; }
+.projector-body {
+  flex: 1; overflow-y: auto; padding: 1.5rem 5%;
+}
+.projector-table {
+  max-width: 900px; margin: 0 auto; width: 100%;
+}
+.projector-table-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; margin-bottom: 8px;
+  font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1px; color: #6b7280;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.projector-th-rank { width: 80px; text-align: center; flex-shrink: 0; }
+.projector-th-name { flex: 2; }
+.projector-th-progress { flex: 3; text-align: center; }
+.projector-th-score { width: 120px; text-align: right; flex-shrink: 0; }
+.projector-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 20px; margin-bottom: 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+.projector-row--first {
+  background: rgba(251,191,36,0.08);
+  border-color: rgba(251,191,36,0.2);
+  box-shadow: 0 0 30px rgba(251,191,36,0.05);
+}
+.projector-rank { width: 80px; text-align: center; flex-shrink: 0; }
+.projector-rank-num { font-size: 1.5rem; }
+.projector-name { flex: 2; font-size: 1.2rem; font-weight: 600; }
+.projector-progress { flex: 3; display: flex; align-items: center; gap: 10px; }
+.projector-bar-track {
+  flex: 1; height: 18px; background: rgba(255,255,255,0.08);
+  border-radius: 10px; overflow: hidden;
+}
+.projector-bar-fill {
+  height: 100%; border-radius: 10px;
+  transition: width 0.5s ease;
+}
+.projector-bar-label {
+  font-size: 0.85rem; color: #9ca3af;
+  white-space: nowrap; width: 80px; text-align: right;
+}
+.projector-score { width: 120px; text-align: right; flex-shrink: 0; }
+.projector-score-val { font-size: 1.5rem; font-weight: 800; color: #a5b4fc; display: block; }
+.projector-score-pts { font-size: 0.75rem; color: #6b7280; }
+.projector-footer {
+  text-align: center; padding: 1rem;
+  font-size: 0.85rem; color: #6b7280;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.projector-footer strong { color: #9ca3af; text-transform: capitalize; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
 @media (max-width: 768px) {
   .ce-root { flex-direction: column; height: auto; }
   .ce-left { width: 100%; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--border-primary); }

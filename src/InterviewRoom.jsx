@@ -125,7 +125,7 @@ const useLeaderboard = (roomCode) => {
   return { leaderboard, roomStatus };
 };
 
-// Leaderboard display component
+// Leaderboard display component (small sidebar)
 const LeaderboardPanel = ({ roomCode }) => {
   const { leaderboard, roomStatus } = useLeaderboard(roomCode);
   if (!leaderboard || leaderboard.length === 0) return null;
@@ -153,6 +153,69 @@ const LeaderboardPanel = ({ roomCode }) => {
       </div>
       <div className="room-lb-status">
         Status: <strong>{roomStatus || 'N/A'}</strong>
+      </div>
+    </div>
+  );
+};
+
+// Projector view — full-screen leaderboard for auditorium projection
+const ProjectorView = ({ roomCode, onBack }) => {
+  const { leaderboard, roomStatus } = useLeaderboard(roomCode);
+
+  const maxQuestions = leaderboard && leaderboard.length > 0 ? Math.max(...leaderboard.map(e => e.totalQuestions)) : 0;
+
+  return (
+    <div className="projector-root">
+      <button className="projector-exit" onClick={onBack}>✕ Exit Projection</button>
+
+      <div className="projector-header">
+        <div className="projector-title">Live Leaderboard</div>
+        <div className="projector-room">Room: {roomCode}</div>
+      </div>
+
+      {(!leaderboard || leaderboard.length === 0) ? (
+        <div className="projector-empty">
+          <div className="projector-empty-icon">🏆</div>
+          <div className="projector-empty-text">Waiting for participants...</div>
+          <div className="projector-empty-sub">As candidates join and answer, the leaderboard will appear here.</div>
+        </div>
+      ) : (
+        <div className="projector-body">
+          <div className="projector-table">
+            <div className="projector-table-header">
+              <div className="projector-th-rank">Rank</div>
+              <div className="projector-th-name">Participant</div>
+              <div className="projector-th-progress">Progress</div>
+              <div className="projector-th-score">Score</div>
+            </div>
+            {leaderboard.map((entry, i) => {
+              const barWidth = entry.percentage;
+              const barColor = i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#d97706' : '#6366f1';
+              return (
+                <div key={entry.participantId || i} className={`projector-row ${i === 0 ? 'projector-row--first' : ''}`}>
+                  <div className="projector-rank">
+                    <span className="projector-rank-num">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
+                  </div>
+                  <div className="projector-name">{entry.name}</div>
+                  <div className="projector-progress">
+                    <div className="projector-bar-track">
+                      <div className="projector-bar-fill" style={{ width: `${barWidth}%`, background: barColor }} />
+                    </div>
+                    <span className="projector-bar-label">{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
+                  </div>
+                  <div className="projector-score">
+                    <span className="projector-score-val">{entry.percentage}%</span>
+                    <span className="projector-score-pts">{entry.points}/{entry.maxPoints} pts</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="projector-footer">
+        Status: <strong>{roomStatus || '—'}</strong>
       </div>
     </div>
   );
@@ -481,7 +544,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
 // ════════════════════════════════════════════════════════════
 //  LOBBY (After room is created — interviewer waiting view)
 // ════════════════════════════════════════════════════════════
-const InterviewerLobby = ({ room, onStartSession, onBack }) => {
+const InterviewerLobby = ({ room, onStartSession, onProject, onBack }) => {
   const [copied, setCopied] = useState(false);
   const [reviveRequests, setReviveRequests] = useState([]);
   const [candidateConnected, setCandidateConnected] = useState(room.status === 'active');
@@ -627,6 +690,9 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
 
           <button id="start-session-btn" className="ip-btn-primary room-start-btn" onClick={onStartSession}>
             <StartIcon /> Start Session
+          </button>
+          <button id="project-btn" className="ip-btn-ghost room-project-btn" onClick={onProject}>
+            🖥 Projector View
           </button>
         </div>
       </div>
@@ -1061,7 +1127,7 @@ const LiveSession = ({ room, onComplete }) => {
 //  InterviewRoom Page (main export)
 // ════════════════════════════════════════════════════════════
 const InterviewRoom = ({ onGoHome, initialMode = null }) => {
-  const [view, setView] = useState(initialMode || 'select'); // select | create | lobby | join | live | done
+  const [view, setView] = useState(initialMode || 'select'); // select | create | lobby | join | live | done | projector
   const [room, setRoom] = useState(null);
   const [sessionResult, setSessionResult] = useState(null);
 
@@ -1179,9 +1245,11 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
         )}
 
         {view === 'create' && <CreateRoom onRoomCreated={handleRoomCreated} onBack={() => setView('select')} />}
-        {view === 'lobby'  && room && <InterviewerLobby room={room} onStartSession={() => setView('live')} onBack={() => setView('create')} />}
+        {view === 'lobby'  && room && <InterviewerLobby room={room} onStartSession={() => setView('live')} onProject={() => setView('projector')} onBack={() => setView('create')} />}
         {view === 'join'   && <JoinRoom onJoined={handleJoined} onBack={() => setView('select')} />}
         {view === 'live'   && room && <LiveSession room={room} onComplete={handleSessionComplete} />}
+
+        {view === 'projector' && room && <ProjectorView roomCode={room.roomCode} onBack={() => setView('lobby')} />}
 
         {view === 'done' && sessionResult && (
           <div className="room-done animate-fade-in-up">
@@ -1223,4 +1291,5 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
   );
 };
 
+export { ProjectorView };
 export default InterviewRoom;
