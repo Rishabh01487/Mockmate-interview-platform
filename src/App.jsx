@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Component, useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import AuthPage     from './AuthPage';
 import HomePage     from './HomePage';
@@ -11,6 +11,33 @@ import './HomePage.css';
 import './InterviewPage.css';
 import './ChatBot.css';
 import './components/components.css';
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#050508', color:'#e5e7eb', padding:32, textAlign:'center' }}>
+          <h2 style={{ marginBottom:12, color:'#f87171' }}>Something went wrong</h2>
+          <p style={{ color:'#9ca3af', marginBottom:20, maxWidth:480, fontSize:'0.85rem', fontFamily:'monospace' }}>
+            {this.state.error.message}
+          </p>
+          <button onClick={() => { this.setState({ error: null }); window.location.reload(); }}
+            style={{ padding:'0.6rem 1.5rem', background:'#6366f1', color:'#fff', border:'none', borderRadius:8, cursor:'pointer', fontSize:'0.85rem' }}>
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── Inner app — rendered only when logged in ──────────────────
 function AppInner() {
@@ -28,7 +55,7 @@ function AppInner() {
   const goHome   = () => setPage('home');
   const goReport = (session) => { setReportSession(session); setPage('report'); };
 
-  if (!isLoggedIn && page !== 'auth') setPage('home');
+  useEffect(() => { if (!isLoggedIn && page !== 'auth') setPage('home'); }, [isLoggedIn, page]);
 
   return (
     <div id="app-root">
@@ -102,8 +129,10 @@ function AppInner() {
 // ── Root — wraps everything in AuthProvider ───────────────────
 export default function App() {
   return (
-    <AuthProvider>
-      <AppInner />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppInner />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
