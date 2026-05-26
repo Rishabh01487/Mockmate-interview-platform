@@ -1046,6 +1046,24 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
         timeAllotted: (dg.timeMinutes || 10) * 60
       };
     });
+    // Persist room results to MongoDB
+    const token = localStorage.getItem('mm_token');
+    if (token) {
+      const allAnswers = Object.values(result.answers || {});
+      const candidateId = result.room?.candidateId?._id || result.room?.candidateId;
+      fetch(`${API_BASE}/api/live-rooms/${result.room?.roomCode}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          answers: allAnswers,
+          violations: result.violations || [],
+          totalTime: result.totalTime || 0,
+          candidateId,
+          domainGroups: result.room?.domainGroups || [],
+        }),
+      }).catch(() => {});
+    }
+
     setSessionResult({ ...result, domainResults });
     setView('done');
   };

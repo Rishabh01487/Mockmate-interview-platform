@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 
 // ════════════════════════════════════════════════════════════
 //  Performance Analytics Dashboard
@@ -127,6 +127,25 @@ function DonutChart({ value, size = 120, color = '#6366f1', label = '' }) {
 //  Main Analytics Component
 // ════════════════════════════════════════════════════════════
 export default function AnalyticsDashboard({ domainResults = [], totalTime = 0, candidateName = 'Candidate' }) {
+  const dashboardRef = useRef(null);
+
+  const handleDownload = () => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @media print {
+        body > *:not(#ad-report-printable) { display: none !important; }
+        #ad-report-printable { display: block !important; position: static !important; }
+        .ad-no-print { display: none !important; }
+        .analytics-dashboard { background: white !important; color: black !important; }
+        .analytics-dashboard * { color: black !important; }
+        .analytics-stat-card { border-color: #ddd !important; }
+        .analytics-bar-fill { background: #6366f1 !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    window.print();
+    setTimeout(() => document.head.removeChild(style), 1000);
+  };
   /*
     domainResults expected format:
     [{
@@ -191,10 +210,18 @@ export default function AnalyticsDashboard({ domainResults = [], totalTime = 0, 
   const totalMaxPoints = domainResults.reduce((s, d) => s + (d.maxPoints || 0), 0);
 
   return (
-    <div className="analytics-dashboard">
+    <div className="analytics-dashboard" id="ad-report-printable" ref={dashboardRef}>
       <div className="analytics-header">
-        <h2 className="analytics-title">📊 Performance Analytics</h2>
-        <p className="analytics-subtitle">{candidateName}'s Interview Performance Report</p>
+        <div style={{ flex: 1 }}>
+          <h2 className="analytics-title">Performance Analytics</h2>
+          <p className="analytics-subtitle">{candidateName}'s Interview Performance Report</p>
+        </div>
+        <button className="ad-no-print ip-btn-primary" onClick={handleDownload} style={{ padding: '0.5rem 1rem', fontSize: '0.78rem', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download Report
+        </button>
       </div>
 
       {/* Top Stats Row */}

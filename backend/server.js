@@ -225,6 +225,78 @@ app.patch('/api/live-rooms/:code', async (req, res) => {
   }
 });
 
+// POST /api/live-rooms/:code/complete — persist room results to MongoDB
+app.post('/api/live-rooms/:code/complete', authenticate, async (req, res) => {
+  const code = req.params.code.toUpperCase();
+  try {
+    const { answers, violations, totalTime, candidateId, domainGroups } = req.body;
+
+    const allAnswers = answers || [];
+    const totalQuestions = (domainGroups || []).reduce((s, dg) => s + (dg.questions?.length || 0), 0);
+
+    // Build question entries with difficulty-based points
+    const questionEntries = allAnswers.map((ans) => {
+      const diff = (ans.difficulty || 'medium').toLowerCase();
+      const maxPoints = POINTS[diff] || POINTS.medium;
+      const pct = ans.score || 0;
+      return {
+        text: ans.question || ans.text || '',
+        questionType: ans.questionType || 'text',
+        userAnswer: ans.textAnswer || ans.code || '',
+        score: Math.min(100, pct),
+        pointsEarned: Math.round((pct / 100) * maxPoints),
+        maxPossiblePoints: maxPoints,
+        timeTaken: ans.timeTaken || 0,
+        answeredAt: ans.answeredAt ? new Date(ans.answeredAt) : new Date(),
+      };
+    });
+
+    const totalPointsEarned = questionEntries.reduce((s, q) => s + q.pointsEarned, 0);
+    const totalMaxPoints = questionEntries.reduce((s, q) => s + q.maxPossiblePoints, 0);
+    const overallScore = totalMaxPoints > 0 ? Math.round((totalPointsEarned / totalMaxPoints) * 100) : 0;
+
+    const interview = await Interview.create({
+      userId: candidateId || req.user.userId,
+      type: 'room',
+      roomCode: code,
+      category: domainGroups?.[0]?.domain || 'general',
+      status: 'completed',
+      totalQuestions: totalQuestions || allAnswers.length,
+      completedQuestions: allAnswers.length,
+      overallScore,
+      totalPoints: totalPointsEarned,
+      maxPossiblePoints: totalMaxPoints,
+      completedAt: new Date(),
+      totalTimeTaken: totalTime || 0,
+      questions: questionEntries,
+      interviewerId: req.user.userId,
+    });
+
+    if (candidateId) {
+      await Analytics.upsertToday(candidateId, {
+        interviewsCompleted: 1,
+        questionsAnswered: allAnswers.length,
+        timeSpent: Math.round((totalTime || 0) / 60),
+      });
+      await User.findByIdAndUpdate(candidateId, {
+        $inc: { 'stats.totalInterviews': 1, 'stats.questionsAnswered': allAnswers.length },
+        $set: { 'stats.lastActive': new Date() },
+      });
+    }
+
+    // Update the live room cache to mark completed
+    const liveRoom = LIVE_ROOMS.get(code);
+    if (liveRoom) {
+      LIVE_ROOMS.set(code, { ...liveRoom, status: 'completed', completedAt: new Date().toISOString() });
+      await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: LIVE_ROOMS.get(code) });
+    }
+
+    res.status(201).json({ success: true, interviewId: interview._id, totalPoints: totalPointsEarned, maxPoints: totalMaxPoints, overallScore });
+  } catch (err) {
+    console.error('[POST /live-rooms/:code/complete]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
 // ════════════════════════════════════════════════════════════
 //  LeetCode Live API Proxy
@@ -658,6 +730,74 @@ app.patch('/api/interviews/:id/abandon', authenticate, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+//  Quick-save AI Practice Session   POST /api/interviews/quick-save
+//  Saves all responses, Interview doc, and Analytics in one call
+// ════════════════════════════════════════════════════════════
+app.post('/api/interviews/quick-save', authenticate, async (req, res) => {
+  try {
+    const { category, difficulty, totalTimeTaken, responses } = req.body;
+    if (!responses?.length) return res.status(400).json({ success: false, message: 'No responses to save' });
+
+    const questionEntries = responses.map((r, i) => {
+      const diff = (r.difficulty || difficulty || 'medium').toLowerCase();
+      const maxPoints = POINTS[diff] || POINTS.medium;
+      const scorePct = r.questionType === 'mcq'
+        ? (r.isCorrect ? 100 : 0)
+        : Math.round(((r.score || 0) / maxPoints) * 100);
+      const pointsEarned = r.isCorrect ? maxPoints : (r.score || 0);
+      return {
+        text: r.question || '',
+        questionType: r.questionType || 'text',
+        userAnswer: r.answer || r.code || '',
+        score: Math.min(100, scorePct),
+        pointsEarned: Math.min(maxPoints, pointsEarned),
+        maxPossiblePoints: maxPoints,
+        timeTaken: r.timeTaken || 0,
+        answeredAt: new Date(),
+      };
+    });
+
+    const totalPointsEarned = questionEntries.reduce((s, q) => s + q.pointsEarned, 0);
+    const totalMaxPoints = questionEntries.reduce((s, q) => s + q.maxPossiblePoints, 0);
+    const overallScore = totalMaxPoints > 0 ? Math.round((totalPointsEarned / totalMaxPoints) * 100) : 0;
+
+    const interview = await Interview.create({
+      userId: req.user.userId,
+      type: 'technical',
+      category: category || 'general',
+      difficulty: (difficulty || 'medium').toLowerCase(),
+      status: 'completed',
+      totalQuestions: responses.length,
+      completedQuestions: responses.length,
+      overallScore,
+      totalPoints: totalPointsEarned,
+      maxPossiblePoints: totalMaxPoints,
+      startedAt: new Date(Date.now() - (totalTimeTaken || 0) * 1000),
+      completedAt: new Date(),
+      totalTimeTaken: totalTimeTaken || 0,
+      questions: questionEntries,
+    });
+    await interview.save();
+
+    await Analytics.upsertToday(req.user.userId, {
+      interviewsCompleted: 1,
+      questionsAnswered: responses.length,
+      timeSpent: Math.round((totalTimeTaken || 0) / 60),
+    });
+
+    await User.findByIdAndUpdate(req.user.userId, {
+      $inc: { 'stats.totalInterviews': 1, 'stats.questionsAnswered': responses.length },
+      $set: { 'stats.lastActive': new Date() },
+    });
+
+    res.status(201).json({ success: true, interviewId: interview._id, totalPoints: totalPointsEarned, maxPoints: totalMaxPoints, overallScore });
+  } catch (err) {
+    console.error('[POST /interviews/quick-save]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 //  Coding Submission Routes   /api/submissions
 // ════════════════════════════════════════════════════════════
 app.post('/api/submissions', authenticate, async (req, res) => {
@@ -1088,24 +1228,56 @@ app.get('/api/rooms/:code/results', authenticate, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  Live Leaderboard   /api/rooms/:code/leaderboard
 //  Polled by frontend to show candidate rankings during session
+//  Supports both InterviewRoom (MongoDB) and LiveRoomCache (old system)
 // ════════════════════════════════════════════════════════════
 app.get('/api/rooms/:code/leaderboard', async (req, res) => {
   try {
-    const room = await InterviewRoom.findOne({ roomCode: req.params.code.toUpperCase() })
+    const code = req.params.code.toUpperCase();
+
+    // Try InterviewRoom model first (new room system)
+    let room = await InterviewRoom.findOne({ roomCode: code })
       .populate('candidateAnswers.questionId', 'difficulty')
       .populate('candidateId', 'name email');
-    if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
+
+    // Fallback to LiveRoomCache (old live-rooms system used by frontend)
+    if (!room) {
+      const cached = await LiveRoomCache.findOne({ roomCode: code });
+      if (!cached) return res.status(404).json({ success: false, message: 'Room not found' });
+      const liveData = cached.data || cached;
+      const questions = liveData.assignedQuestions || [];
+      const answers = liveData.candidateAnswers || [];
+      const totalMax = questions.reduce((s, aq) => {
+        const diff = (aq.difficulty || 'medium').toLowerCase();
+        return s + (POINTS[diff] || POINTS.medium);
+      }, questions.length > 0 ? 0 : answers.length * 10);
+      const earned = answers.reduce((s, ans) => {
+        const diff = (ans.difficulty || 'medium').toLowerCase();
+        const maxPts = POINTS[diff] || POINTS.medium;
+        return s + Math.round(((ans.score || 0) / 100) * maxPts);
+      }, 0);
+      return res.json({
+        success: true,
+        leaderboard: [{
+          name: liveData.candidateEmail || 'Candidate',
+          email: liveData.candidateEmail || '',
+          points: earned,
+          maxPoints: totalMax,
+          percentage: totalMax > 0 ? Math.round((earned / totalMax) * 100) : 0,
+          questionsAnswered: answers.length,
+          totalQuestions: questions.length || answers.length,
+        }],
+        roomStatus: liveData.status || 'active',
+      });
+    }
 
     const answers = room.candidateAnswers || [];
     const questions = room.assignedQuestions || [];
 
-    // Calculate total max points for this room
     const totalMaxPoints = questions.reduce((s, aq) => {
       const diff = (aq.questionId?.difficulty || 'medium').toLowerCase();
       return s + (POINTS[diff] || POINTS.medium);
     }, 0);
 
-    // Calculate candidate's earned points
     const earnedPoints = answers.reduce((s, ans) => {
       const aq = questions.find(q => q.questionId?.toString() === ans.questionId?.toString());
       const diff = (aq?.questionId?.difficulty || 'medium').toLowerCase();
