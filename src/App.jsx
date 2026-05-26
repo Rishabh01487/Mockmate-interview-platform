@@ -45,17 +45,17 @@ function AppInner() {
   const [page, setPage]               = useState('home');
   const [reportSession, setReportSession] = useState(null);
 
+  const goHome   = () => setPage('home');
+  const goReport = (session) => { setReportSession(session); setPage('report'); };
+
+  useEffect(() => { if (!isLoggedIn && page !== 'auth') setPage('home'); }, [isLoggedIn, page]);
+
   // Wait until auth state is loaded from localStorage
   if (!ready) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'#050508' }}>
       <div style={{ width:40, height:40, border:'3px solid rgba(255,255,255,0.1)', borderTopColor:'#6366f1', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
     </div>
   );
-
-  const goHome   = () => setPage('home');
-  const goReport = (session) => { setReportSession(session); setPage('report'); };
-
-  useEffect(() => { if (!isLoggedIn && page !== 'auth') setPage('home'); }, [isLoggedIn, page]);
 
   return (
     <div id="app-root">
