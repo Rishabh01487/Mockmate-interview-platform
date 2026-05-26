@@ -496,9 +496,9 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  AI Proxy — OpenAI-compatible (set AI_API_URL + AI_API_KEY + AI_MODEL)
 // ════════════════════════════════════════════════════════════
-const AI_BASE_URL = (process.env.AI_API_URL || 'https://api.deepseek.com/v1').trim().replace(/\/$/, '');
+const AI_BASE_URL = (process.env.AI_API_URL || 'https://openrouter.ai/api/v1').trim().replace(/\/$/, '');
 const AI_KEY = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL = (process.env.AI_MODEL || 'deepseek-v4-flash').trim();
+const AI_MODEL = (process.env.AI_MODEL || 'openrouter/free').trim();
 
 console.log(`✓ AI Provider → ${AI_BASE_URL} (model: ${AI_MODEL})`);
 
@@ -507,7 +507,7 @@ app.get('/api/ai/health', async (req, res) => {
   try {
     const checkUrl = `${AI_BASE_URL}/models`;
     const check = await fetch(checkUrl, {
-      headers: { 'Authorization': `Bearer ${AI_KEY}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${AI_KEY}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mockmate-mu-one.vercel.app', 'X-Title': 'MockMate' },
       signal: AbortSignal.timeout(8000)
     });
     if (!check.ok) {
@@ -531,7 +531,7 @@ app.post('/api/ai/chat', async (req, res) => {
     console.log(`[AI Chat] → model=${useModel}, msgs=${messages?.length}`);
     response = await fetch(`${AI_BASE_URL}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}`, 'HTTP-Referer': 'https://mockmate-mu-one.vercel.app', 'X-Title': 'MockMate' },
       body: JSON.stringify({ model: useModel, messages, temperature, max_tokens: 4096, stream: false }),
       signal: AbortSignal.timeout(120000)
     });

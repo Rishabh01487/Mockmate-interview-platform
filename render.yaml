@@ -11,11 +11,11 @@ services:
       - key: JWT_SECRET
         sync: false          # Set in Render dashboard → any long random string
       - key: AI_API_URL
-        value: https://api.deepseek.com/v1
+        value: https://openrouter.ai/api/v1
       - key: AI_API_KEY
-        value: sk-2eb60e010747407795d24dbf5516197b
+        sync: false          # Set in Render dashboard → your OpenRouter API key
       - key: AI_MODEL
-        value: deepseek-v4-flash
+        value: openrouter/free
       - key: CLIENT_URL
         sync: false          # Set in Render dashboard → your Vercel frontend URL
     healthCheckPath: /api/health
