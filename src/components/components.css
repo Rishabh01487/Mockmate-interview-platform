@@ -588,6 +588,17 @@
   background: rgba(99,102,241,0.08);
   border-bottom: 1px solid var(--border-subtle);
 }
+.room-lb-count {
+  margin-left: auto;
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  background: rgba(99,102,241,0.12);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
 .room-lb-list {
   display: flex;
   flex-direction: column;

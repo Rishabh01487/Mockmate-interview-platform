@@ -90,21 +90,7 @@ const AnalyticsReport = ({ session, onBack }) => {
   const durationMin  = s.startedAt && s.completedAt
     ? Math.round((new Date(s.completedAt) - new Date(s.startedAt)) / 60000) : Math.round(totalTime / 60);
 
-  // Print-based PDF export
-  const handleDownload = () => {
-    const style = document.createElement('style');
-    style.textContent = `
-      @media print {
-        body > *:not(#report-printable) { display: none !important; }
-        #report-printable { display: block !important; position: static !important; }
-        .ar-no-print { display: none !important; }
-        .ar-root { background: white !important; color: black !important; }
-      }
-    `;
-    document.head.appendChild(style);
-    window.print();
-    setTimeout(() => document.head.removeChild(style), 1000);
-  };
+  const handleDownload = () => { window.print(); };
 
   const fmt = (sec) => `${Math.floor(sec / 60)}m ${sec % 60}s`;
 

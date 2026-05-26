@@ -80,7 +80,7 @@ const DIFF_POINTS = { easy: 5, medium: 10, hard: 20 };
 const getMaxPoints = (q) => DIFF_POINTS[(q.difficulty || 'medium').toLowerCase()] || DIFF_POINTS.medium;
 
 // Leaderboard polling hook
-const useLeaderboard = (roomCode, pollInterval = 5000) => {
+const useLeaderboard = (roomCode, pollInterval = 1000) => {
   const [leaderboard, setLeaderboard] = useState(null);
   const [roomStatus, setRoomStatus] = useState('');
 
@@ -117,14 +117,15 @@ const LeaderboardPanel = ({ roomCode }) => {
           <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5a2.5 2.5 0 0 1 0 5"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5a2.5 2.5 0 0 0 0 5"/><path d="M4 22h16"/><path d="M10 22V2l4 4v16"/>
         </svg>
         Live Leaderboard
+        <span className="room-lb-count">{leaderboard.length} participant{leaderboard.length !== 1 ? 's' : ''}</span>
       </div>
       <div className="room-lb-list">
         {leaderboard.map((entry, i) => (
-          <div key={i} className={`room-lb-row ${i === 0 ? 'room-lb-row--lead' : ''}`}>
+          <div key={entry.participantId || i} className={`room-lb-row ${i === 0 ? 'room-lb-row--lead' : ''}`}>
             <span className="room-lb-rank">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}</span>
             <div className="room-lb-info">
               <span className="room-lb-name">{entry.name}</span>
-              <span className="room-lb-progress">{entry.questionsAnswered}/{entry.totalQuestions} Qs</span>
+              <span className="room-lb-progress">{entry.questionsAnswered}/{entry.totalQuestions} Qs · {entry.percentage}%</span>
             </div>
             <span className="room-lb-score">{entry.points}<small>/{entry.maxPoints}</small></span>
           </div>
@@ -151,11 +152,19 @@ const patchLiveRoom = async (code, updates) => {
   }
 };
 
+const postJoinRoom = async (code, name, email) => {
+  const res = await fetch(`${API_BASE}/api/live-rooms/${code.toUpperCase()}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email }),
+  });
+  return await res.json();
+};
+
 // ════════════════════════════════════════════════════════════
 //  CREATE ROOM (Interviewer)
 const CreateRoom = ({ onRoomCreated, onBack }) => {
   const [title, setTitle] = useState('');
-  const [candidateEmail, setCandidateEmail] = useState('');
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(60);
   const [tabSwitchLimit, setTabSwitchLimit] = useState(1);
   const [selectedQs, setSelectedQs] = useState([]);
@@ -262,7 +271,6 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
       const room = {
         roomCode: code,
         title: title || 'MockMate Interview',
-        candidateEmail,
         settings: { timeLimitMinutes, proctoring: { tabSwitchLimit, blockOnTabSwitch: true, requireInterviewerRevive: true } },
         assignedQuestions: selectedQs.map((q, i) => ({ ...q, orderIndex: i })),
         domainGroups: Object.entries(groups).map(([domain, qs]) => ({
@@ -306,11 +314,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
               value={title} onChange={e => setTitle(e.target.value)} />
           </div>
 
-          <div className="room-field">
-            <label className="room-field-label" htmlFor="candidate-email">Candidate Email</label>
-            <input id="candidate-email" className="room-input" type="email" placeholder="candidate@email.com"
-              value={candidateEmail} onChange={e => setCandidateEmail(e.target.value)} />
-          </div>
+          <div className="room-section-label">Questions</div>
 
           <div className="room-field-row">
             <div className="room-field">
@@ -540,19 +544,26 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
           )}
 
           {/* Candidate Connection Status */}
-          <div className="room-info-card" style={{ borderColor: candidateConnected ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.06)' }}>
-            <div className="room-info-label">Candidate Status</div>
-            <div className="room-info-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{
-                width: 10, height: 10, borderRadius: '50%',
-                background: candidateConnected ? '#22c55e' : '#6b7280',
-                boxShadow: candidateConnected ? '0 0 8px rgba(34,197,94,0.5)' : 'none',
-                animation: candidateConnected ? 'none' : 'pulse 2s infinite',
-              }} />
-              <span style={{ color: candidateConnected ? '#22c55e' : 'var(--text-dim)', fontWeight: 600, fontSize: '0.85rem' }}>
-                {candidateConnected ? '✓ Candidate Connected!' : 'Waiting for candidate to join…'}
-              </span>
-            </div>
+          <div className="room-info-card">
+            <div className="room-info-label">Participants</div>
+            {leaderboard && leaderboard.length > 0 ? (
+              leaderboard.map((p, i) => (
+                <div key={p.participantId || i} className="room-info-row" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: p.status === 'completed' ? '#6366f1' : '#22c55e',
+                    boxShadow: p.status === 'completed' ? '0 0 8px rgba(99,102,241,0.5)' : '0 0 8px rgba(34,197,94,0.5)',
+                  }} />
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.85rem' }}>
+                    {p.name} {p.status === 'completed' ? '✓ Done' : '● Active'} · {p.percentage}%
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="room-info-row" style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>
+                Waiting for participants to join…
+              </div>
+            )}
             {roomStatus === 'completed' && (
               <div className="room-info-row" style={{ color: '#6366f1', fontWeight: 600, marginTop: '0.5rem' }}>
                 Session completed
@@ -598,11 +609,15 @@ const InterviewerLobby = ({ room, onStartSession, onBack }) => {
 // ════════════════════════════════════════════════════════════
 const JoinRoom = ({ onJoined, onBack }) => {
   const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [joining, setJoining] = useState(false);
 
   const handleJoin = async () => {
     if (code.trim().length !== 6) { setError('Room code must be 6 characters'); return; }
+    if (!name.trim()) { setError('Please enter your name'); return; }
+    if (!email.trim()) { setError('Please enter your email'); return; }
     setJoining(true);
     setError('');
     try {
@@ -613,13 +628,11 @@ const JoinRoom = ({ onJoined, onBack }) => {
         return;
       }
       const room = data.room;
-      // Validate room has questions
       if (!room.assignedQuestions?.length && !room.domainGroups?.some(dg => dg.questions?.length)) {
         setError('This room has no questions assigned. Please ask the interviewer to set up the room again.');
         setJoining(false);
         return;
       }
-      // Check room status
       if (room.status === 'completed') {
         setError('This room session has already been completed.');
         setJoining(false);
@@ -630,10 +643,18 @@ const JoinRoom = ({ onJoined, onBack }) => {
         setJoining(false);
         return;
       }
-      // Mark room as active on the server
+
+      // Register as a participant in this room
+      const joinResult = await postJoinRoom(code, name, email);
+      if (!joinResult.success) {
+        setError(joinResult.message || 'Failed to join room. Please try again.');
+        setJoining(false);
+        return;
+      }
+      localStorage.setItem('mm_participantId', joinResult.participantId);
       await patchLiveRoom(code, { status: 'active' });
       setJoining(false);
-      onJoined(room);
+      onJoined({ ...room, participantId: joinResult.participantId });
     } catch (err) {
       setError('Could not connect to server. Please try again.');
       setJoining(false);
@@ -646,11 +667,21 @@ const JoinRoom = ({ onJoined, onBack }) => {
         <button className="ip-btn-ghost" onClick={onBack}><BackIcon /> Back</button>
         <div>
           <h2 className="room-step-title">Join Interview Room</h2>
-          <p className="room-step-sub">Enter the 6-character code provided by your interviewer</p>
+          <p className="room-step-sub">Enter your details and the code provided by your interviewer</p>
         </div>
       </div>
 
       <div className="room-join-card">
+        <label className="room-field-label" htmlFor="room-name-input">Your Name</label>
+        <input id="room-name-input" className="room-input" type="text" placeholder="e.g. John Doe"
+          value={name} onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && document.getElementById('room-email-input')?.focus()} />
+
+        <label className="room-field-label" htmlFor="room-email-input">Your Email</label>
+        <input id="room-email-input" className="room-input" type="email" placeholder="you@example.com"
+          value={email} onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && document.getElementById('room-code-input')?.focus()} />
+
         <label className="room-field-label" htmlFor="room-code-input">Room Code</label>
         <input
           id="room-code-input"
@@ -756,11 +787,13 @@ const LiveSession = ({ room, onComplete }) => {
     const gIdx = domainGroups.slice(0, domainIdx).reduce((s, dg) => s + dg.questions.length, 0) + qIdx;
     const answerEntry = { ...q, ...ans, _domain: currentDomain.domain, answeredAt: new Date() };
     setAnswers(prev => ({ ...prev, [gIdx]: answerEntry }));
-    // Sync answer to server (fire-and-forget)
+    const participantId = localStorage.getItem('mm_participantId');
     patchLiveRoom(room.roomCode, {
-      candidateAnswers: [...(room.candidateAnswers || []), {
+      participantId,
+      candidateAnswers: [{
         questionType: ans.questionType || q.questionType,
         score: ans.score || 0,
+        difficulty: q.difficulty || 'medium',
         answeredAt: new Date().toISOString(),
       }],
     }).catch(() => {});
@@ -1061,6 +1094,7 @@ const InterviewRoom = ({ onGoHome, initialMode = null }) => {
         violations: result.violations || [],
         totalTime: result.totalTime || 0,
         candidateId,
+        participantId: localStorage.getItem('mm_participantId'),
         domainGroups: result.room?.domainGroups || [],
       }),
     }).catch(() => {});

@@ -165,6 +165,7 @@ app.post('/api/live-rooms', async (req, res) => {
   const { room } = req.body;
   if (!room || !room.roomCode) return res.status(400).json({ success: false, message: 'Invalid room data' });
   const code = room.roomCode.toUpperCase();
+  room.participants = room.participants || [];
   try {
     // Upsert in MongoDB so re-creating same code works
     await LiveRoomCache.findOneAndUpdate(
@@ -203,24 +204,77 @@ app.get('/api/live-rooms/:code', async (req, res) => {
   }
 });
 
-// PATCH /api/live-rooms/:code — update room state (violations, status, answers)
+// PATCH /api/live-rooms/:code — update room state or participant answers
 app.patch('/api/live-rooms/:code', async (req, res) => {
   const code = req.params.code.toUpperCase();
   try {
-    // Get current data from memory or DB
     let room = LIVE_ROOMS.get(code);
     if (!room) {
       const cached = await LiveRoomCache.findOne({ roomCode: code });
       if (!cached) return res.status(404).json({ success: false, message: 'Room not found' });
       room = cached.data;
     }
-    const updated = { ...room, ...req.body };
-    // Update both memory and MongoDB
-    LIVE_ROOMS.set(code, updated);
-    await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: updated });
-    res.json({ success: true, room: updated });
+    const { participantId, ...rest } = req.body;
+    if (participantId && room.participants) {
+      // Participant-level update (e.g., answer submission)
+      const idx = room.participants.findIndex(p => p.id === participantId);
+      if (idx === -1) return res.status(404).json({ success: false, message: 'Participant not found' });
+      if (rest.candidateAnswers) {
+        room.participants[idx].answers.push(...rest.candidateAnswers);
+        room.participants[idx].questionsAnswered = room.participants[idx].answers.length;
+        const diffPoints = { easy: 5, medium: 10, hard: 20 };
+        let totalEarned = 0;
+        let totalMax = 0;
+        for (const ans of room.participants[idx].answers) {
+          const diff = (ans.difficulty || 'medium').toLowerCase();
+          const maxPts = diffPoints[diff] || diffPoints.medium;
+          totalEarned += Math.round(((ans.score || 0) / 100) * maxPts);
+          totalMax += maxPts;
+        }
+        room.participants[idx].totalScore = totalMax > 0 ? Math.round((totalEarned / totalMax) * 100) : 0;
+      }
+      if (rest.status) room.participants[idx].status = rest.status;
+    } else {
+      // Room-level update (status, violations, etc.)
+      Object.assign(room, rest);
+    }
+    LIVE_ROOMS.set(code, room);
+    await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: room });
+    res.json({ success: true, room });
   } catch (err) {
     console.error('[PATCH /api/live-rooms/:code]', err.message);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// POST /api/live-rooms/:code/join — candidate joins room, gets unique participantId
+app.post('/api/live-rooms/:code/join', async (req, res) => {
+  const code = req.params.code.toUpperCase();
+  try {
+    let room = LIVE_ROOMS.get(code);
+    if (!room) {
+      const cached = await LiveRoomCache.findOne({ roomCode: code });
+      if (!cached) return res.status(404).json({ success: false, message: 'Room not found. Check the code or ask the interviewer to create a new room.' });
+      room = cached.data;
+    }
+    const { name, email } = req.body;
+    const participantId = uuidv4().slice(0, 8);
+    room.participants = room.participants || [];
+    room.participants.push({
+      id: participantId,
+      name: (name || '').trim() || 'Anonymous',
+      email: (email || '').trim(),
+      answers: [],
+      totalScore: 0,
+      questionsAnswered: 0,
+      status: 'active',
+      joinedAt: new Date().toISOString(),
+    });
+    LIVE_ROOMS.set(code, room);
+    await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: room });
+    res.json({ success: true, participantId, participant: room.participants[room.participants.length - 1] });
+  } catch (err) {
+    console.error('[POST /api/live-rooms/:code/join]', err.message);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
@@ -241,7 +295,20 @@ app.post('/api/live-rooms/:code/complete', async (req, res) => {
       } catch {}
     }
 
-    const { answers, violations, totalTime, candidateId, domainGroups } = req.body;
+    const { answers, violations, totalTime, candidateId, participantId, domainGroups } = req.body;
+
+    // Mark participant as completed in live room cache
+    if (participantId) {
+      const liveRoom = LIVE_ROOMS.get(code) || (await LiveRoomCache.findOne({ roomCode: code }))?.data;
+      if (liveRoom && liveRoom.participants) {
+        const pIdx = liveRoom.participants.findIndex(p => p.id === participantId);
+        if (pIdx !== -1) {
+          liveRoom.participants[pIdx].status = 'completed';
+          LIVE_ROOMS.set(code, liveRoom);
+          await LiveRoomCache.findOneAndUpdate({ roomCode: code }, { data: liveRoom });
+        }
+      }
+    }
 
     const allAnswers = answers || [];
     const totalQuestions = (domainGroups || []).reduce((s, dg) => s + (dg.questions?.length || 0), 0);
@@ -1257,75 +1324,121 @@ app.get('/api/rooms/:code/results', authenticate, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  Live Leaderboard   /api/rooms/:code/leaderboard
 //  Polled by frontend to show candidate rankings during session
-//  Supports both InterviewRoom (MongoDB) and LiveRoomCache (old system)
+//  Supports multi-candidate participants[], single-candidate LiveRoomCache,
+//  and InterviewRoom model (old system)
 // ════════════════════════════════════════════════════════════
 app.get('/api/rooms/:code/leaderboard', async (req, res) => {
   try {
     const code = req.params.code.toUpperCase();
 
-    // Try InterviewRoom model first (new room system)
-    let room = await InterviewRoom.findOne({ roomCode: code })
-      .populate('candidateAnswers.questionId', 'difficulty')
-      .populate('candidateId', 'name email');
+    // Helper: compute leaderboard entries for a participant list
+    const computeEntries = (participants, questions) => {
+      const maxPerQ = { easy: 5, medium: 10, hard: 20 };
+      const totalMax = (questions || []).reduce((s, aq) => {
+        const diff = (aq.difficulty || aq.questionId?.difficulty || 'medium').toLowerCase();
+        return s + (maxPerQ[diff] || maxPerQ.medium);
+      }, 0) || 10; // fallback if no questions
 
-    // Fallback to LiveRoomCache (old live-rooms system used by frontend)
-    if (!room) {
-      const cached = await LiveRoomCache.findOne({ roomCode: code });
-      if (!cached) return res.status(404).json({ success: false, message: 'Room not found' });
-      const liveData = cached.data || cached;
-      const questions = liveData.assignedQuestions || [];
-      const answers = liveData.candidateAnswers || [];
-      const totalMax = questions.reduce((s, aq) => {
-        const diff = (aq.difficulty || 'medium').toLowerCase();
-        return s + (POINTS[diff] || POINTS.medium);
-      }, questions.length > 0 ? 0 : answers.length * 10);
-      const earned = answers.reduce((s, ans) => {
-        const diff = (ans.difficulty || 'medium').toLowerCase();
-        const maxPts = POINTS[diff] || POINTS.medium;
-        return s + Math.round(((ans.score || 0) / 100) * maxPts);
-      }, 0);
-      return res.json({
-        success: true,
-        leaderboard: [{
-          name: liveData.candidateEmail || 'Candidate',
-          email: liveData.candidateEmail || '',
+      return (participants || []).map(p => {
+        const answers = p.answers || [];
+        const earned = answers.reduce((s, ans) => {
+          const diff = (ans.difficulty || 'medium').toLowerCase();
+          return s + Math.round(((ans.score || 0) / 100) * (maxPerQ[diff] || maxPerQ.medium));
+        }, 0);
+        return {
+          participantId: p.id,
+          name: p.name || 'Anonymous',
+          email: p.email || '',
           points: earned,
           maxPoints: totalMax,
           percentage: totalMax > 0 ? Math.round((earned / totalMax) * 100) : 0,
           questionsAnswered: answers.length,
-          totalQuestions: questions.length || answers.length,
+          totalQuestions: (questions || []).length || answers.length,
+          status: p.status || 'active',
+        };
+      });
+    };
+
+    // Try InterviewRoom model first (new room system)
+    let roomDoc = await InterviewRoom.findOne({ roomCode: code })
+      .populate('candidateAnswers.questionId', 'difficulty')
+      .populate('candidateId', 'name email');
+
+    if (roomDoc) {
+      const questions = roomDoc.assignedQuestions || [];
+      // Multi-candidate: participants[] via LiveRoom system stored in roomDoc
+      // For InterviewRoom model, try to find associated LiveRoomCache
+      const cached = await LiveRoomCache.findOne({ roomCode: code });
+      const liveData = cached?.data || {};
+      const participants = liveData.participants || [];
+      if (participants.length > 1) {
+        const entries = computeEntries(participants, questions);
+        entries.sort((a, b) => b.points - a.points);
+        return res.json({ success: true, leaderboard: entries, roomStatus: roomDoc.status });
+      }
+      // Single-candidate fallback for InterviewRoom
+      const answers = roomDoc.candidateAnswers || [];
+      const maxPerQ = { easy: 5, medium: 10, hard: 20 };
+      const totalMaxPoints = questions.reduce((s, aq) => {
+        const diff = (aq.questionId?.difficulty || 'medium').toLowerCase();
+        return s + (maxPerQ[diff] || maxPerQ.medium);
+      }, 0);
+      const earnedPoints = answers.reduce((s, ans) => {
+        const aq = questions.find(q => q.questionId?.toString() === ans.questionId?.toString());
+        const diff = (aq?.questionId?.difficulty || 'medium').toLowerCase();
+        return s + Math.round((ans.score || 0) / 100 * (maxPerQ[diff] || maxPerQ.medium));
+      }, 0);
+      return res.json({
+        success: true,
+        leaderboard: [{
+          name: roomDoc.candidateId?.name || roomDoc.candidateEmail || 'Candidate',
+          email: roomDoc.candidateId?.email || roomDoc.candidateEmail || '',
+          points: earnedPoints,
+          maxPoints: totalMaxPoints,
+          percentage: totalMaxPoints > 0 ? Math.round((earnedPoints / totalMaxPoints) * 100) : 0,
+          questionsAnswered: answers.length,
+          totalQuestions: questions.length,
         }],
-        roomStatus: liveData.status || 'active',
+        roomStatus: roomDoc.status,
       });
     }
 
-    const answers = room.candidateAnswers || [];
-    const questions = room.assignedQuestions || [];
+    // Fallback to LiveRoomCache (old live-rooms system used by frontend)
+    const cached = await LiveRoomCache.findOne({ roomCode: code });
+    if (!cached) return res.status(404).json({ success: false, message: 'Room not found' });
+    const liveData = cached.data || cached;
+    const questions = liveData.assignedQuestions || [];
+    const participants = liveData.participants || [];
 
-    const totalMaxPoints = questions.reduce((s, aq) => {
-      const diff = (aq.questionId?.difficulty || 'medium').toLowerCase();
-      return s + (POINTS[diff] || POINTS.medium);
+    if (participants.length > 0) {
+      const entries = computeEntries(participants, questions);
+      entries.sort((a, b) => b.points - a.points);
+      return res.json({ success: true, leaderboard: entries, roomStatus: liveData.status || 'active' });
+    }
+
+    // Single-candidate fallback for LiveRoomCache (no participants array)
+    const answers = liveData.candidateAnswers || [];
+    const maxPerQ = { easy: 5, medium: 10, hard: 20 };
+    const totalMax = questions.reduce((s, aq) => {
+      const diff = (aq.difficulty || 'medium').toLowerCase();
+      return s + (maxPerQ[diff] || maxPerQ.medium);
+    }, questions.length > 0 ? 0 : answers.length * 10);
+    const earned = answers.reduce((s, ans) => {
+      const diff = (ans.difficulty || 'medium').toLowerCase();
+      return s + Math.round(((ans.score || 0) / 100) * (maxPerQ[diff] || maxPerQ.medium));
     }, 0);
-
-    const earnedPoints = answers.reduce((s, ans) => {
-      const aq = questions.find(q => q.questionId?.toString() === ans.questionId?.toString());
-      const diff = (aq?.questionId?.difficulty || 'medium').toLowerCase();
-      const maxPoints = POINTS[diff] || POINTS.medium;
-      return s + Math.round((ans.score || 0) / 100 * maxPoints);
-    }, 0);
-
     res.json({
       success: true,
       leaderboard: [{
-        name: room.candidateId?.name || room.candidateEmail || 'Candidate',
-        email: room.candidateId?.email || room.candidateEmail || '',
-        points: earnedPoints,
-        maxPoints: totalMaxPoints,
-        percentage: totalMaxPoints > 0 ? Math.round((earnedPoints / totalMaxPoints) * 100) : 0,
+        name: liveData.candidateEmail || 'Candidate',
+        email: liveData.candidateEmail || '',
+        points: earned,
+        maxPoints: totalMax,
+        percentage: totalMax > 0 ? Math.round((earned / totalMax) * 100) : 0,
         questionsAnswered: answers.length,
-        totalQuestions: questions.length,
+        totalQuestions: questions.length || answers.length,
       }],
-      roomStatus: room.status,
+      roomStatus: liveData.status || 'active',
     });
   } catch (err) {
     console.error('[GET /rooms/:code/leaderboard]', err);

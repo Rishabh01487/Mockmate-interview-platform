@@ -129,23 +129,7 @@ function DonutChart({ value, size = 120, color = '#6366f1', label = '' }) {
 export default function AnalyticsDashboard({ domainResults = [], totalTime = 0, candidateName = 'Candidate' }) {
   const dashboardRef = useRef(null);
 
-  const handleDownload = () => {
-    const style = document.createElement('style');
-    style.textContent = `
-      @media print {
-        body > *:not(#ad-report-printable) { display: none !important; }
-        #ad-report-printable { display: block !important; position: static !important; }
-        .ad-no-print { display: none !important; }
-        .analytics-dashboard { background: white !important; color: black !important; }
-        .analytics-dashboard * { color: black !important; }
-        .analytics-stat-card { border-color: #ddd !important; }
-        .analytics-bar-fill { background: #6366f1 !important; }
-      }
-    `;
-    document.head.appendChild(style);
-    window.print();
-    setTimeout(() => document.head.removeChild(style), 1000);
-  };
+  const handleDownload = () => { window.print(); };
   /*
     domainResults expected format:
     [{

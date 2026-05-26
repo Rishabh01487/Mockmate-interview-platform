@@ -307,3 +307,12 @@
     gap: 1rem;
   }
 }
+
+@media print {
+  body { background: white !important; }
+  .ad-no-print { display: none !important; }
+  .analytics-dashboard { background: white !important; color: black !important; }
+  .analytics-dashboard * { color: black !important; }
+  .analytics-stat-card { border-color: #ddd !important; }
+  .analytics-bar-fill { background: #6366f1 !important; }
+}
