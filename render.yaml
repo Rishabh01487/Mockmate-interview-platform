@@ -3,7 +3,7 @@ services:
     name: mockmate-backend
     runtime: node
     buildCommand: cd backend && npm install && cd .. && npm run build
-    startCommand: node backend/server.js
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
