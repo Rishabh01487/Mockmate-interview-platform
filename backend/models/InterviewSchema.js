@@ -94,7 +94,6 @@ const interviewSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'User reference is required'],
     },
 
     // Interview classification

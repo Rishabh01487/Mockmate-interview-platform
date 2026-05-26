@@ -226,9 +226,21 @@ app.patch('/api/live-rooms/:code', async (req, res) => {
 });
 
 // POST /api/live-rooms/:code/complete — persist room results to MongoDB
-app.post('/api/live-rooms/:code/complete', authenticate, async (req, res) => {
+// Works with or without auth — anonymous saves skip Analytics/User updates
+app.post('/api/live-rooms/:code/complete', async (req, res) => {
   const code = req.params.code.toUpperCase();
   try {
+    // Extract userId from token if present (optional auth)
+    let authUserId = null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.split(' ')[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        authUserId = decoded.userId;
+      } catch {}
+    }
+
     const { answers, violations, totalTime, candidateId, domainGroups } = req.body;
 
     const allAnswers = answers || [];
@@ -255,8 +267,8 @@ app.post('/api/live-rooms/:code/complete', authenticate, async (req, res) => {
     const totalMaxPoints = questionEntries.reduce((s, q) => s + q.maxPossiblePoints, 0);
     const overallScore = totalMaxPoints > 0 ? Math.round((totalPointsEarned / totalMaxPoints) * 100) : 0;
 
-    const interview = await Interview.create({
-      userId: candidateId || req.user.userId,
+    const effectiveUserId = candidateId || authUserId;
+    const interviewData = {
       type: 'room',
       roomCode: code,
       category: domainGroups?.[0]?.domain || 'general',
@@ -269,16 +281,19 @@ app.post('/api/live-rooms/:code/complete', authenticate, async (req, res) => {
       completedAt: new Date(),
       totalTimeTaken: totalTime || 0,
       questions: questionEntries,
-      interviewerId: req.user.userId,
-    });
+    };
+    if (effectiveUserId) interviewData.userId = effectiveUserId;
+    if (authUserId) interviewData.interviewerId = authUserId;
 
-    if (candidateId) {
-      await Analytics.upsertToday(candidateId, {
+    const interview = await Interview.create(interviewData);
+
+    if (effectiveUserId) {
+      await Analytics.upsertToday(effectiveUserId, {
         interviewsCompleted: 1,
         questionsAnswered: allAnswers.length,
         timeSpent: Math.round((totalTime || 0) / 60),
       });
-      await User.findByIdAndUpdate(candidateId, {
+      await User.findByIdAndUpdate(effectiveUserId, {
         $inc: { 'stats.totalInterviews': 1, 'stats.questionsAnswered': allAnswers.length },
         $set: { 'stats.lastActive': new Date() },
       });
@@ -732,9 +747,21 @@ app.patch('/api/interviews/:id/abandon', authenticate, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  Quick-save AI Practice Session   POST /api/interviews/quick-save
 //  Saves all responses, Interview doc, and Analytics in one call
+//  Works with or without auth — anonymous saves skip Analytics/User updates
 // ════════════════════════════════════════════════════════════
-app.post('/api/interviews/quick-save', authenticate, async (req, res) => {
+app.post('/api/interviews/quick-save', async (req, res) => {
   try {
+    // Extract userId from token if present (optional auth)
+    let userId = null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.split(' ')[1];
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        userId = decoded.userId;
+      } catch {}
+    }
+
     const { category, difficulty, totalTimeTaken, responses } = req.body;
     if (!responses?.length) return res.status(400).json({ success: false, message: 'No responses to save' });
 
@@ -761,8 +788,7 @@ app.post('/api/interviews/quick-save', authenticate, async (req, res) => {
     const totalMaxPoints = questionEntries.reduce((s, q) => s + q.maxPossiblePoints, 0);
     const overallScore = totalMaxPoints > 0 ? Math.round((totalPointsEarned / totalMaxPoints) * 100) : 0;
 
-    const interview = await Interview.create({
-      userId: req.user.userId,
+    const interviewData = {
       type: 'technical',
       category: category || 'general',
       difficulty: (difficulty || 'medium').toLowerCase(),
@@ -776,19 +802,22 @@ app.post('/api/interviews/quick-save', authenticate, async (req, res) => {
       completedAt: new Date(),
       totalTimeTaken: totalTimeTaken || 0,
       questions: questionEntries,
-    });
-    await interview.save();
+    };
+    if (userId) interviewData.userId = userId;
 
-    await Analytics.upsertToday(req.user.userId, {
-      interviewsCompleted: 1,
-      questionsAnswered: responses.length,
-      timeSpent: Math.round((totalTimeTaken || 0) / 60),
-    });
+    const interview = await Interview.create(interviewData);
 
-    await User.findByIdAndUpdate(req.user.userId, {
-      $inc: { 'stats.totalInterviews': 1, 'stats.questionsAnswered': responses.length },
-      $set: { 'stats.lastActive': new Date() },
-    });
+    if (userId) {
+      await Analytics.upsertToday(userId, {
+        interviewsCompleted: 1,
+        questionsAnswered: responses.length,
+        timeSpent: Math.round((totalTimeTaken || 0) / 60),
+      });
+      await User.findByIdAndUpdate(userId, {
+        $inc: { 'stats.totalInterviews': 1, 'stats.questionsAnswered': responses.length },
+        $set: { 'stats.lastActive': new Date() },
+      });
+    }
 
     res.status(201).json({ success: true, interviewId: interview._id, totalPoints: totalPointsEarned, maxPoints: totalMaxPoints, overallScore });
   } catch (err) {
@@ -1315,6 +1344,30 @@ app.get('/api/feedback', authenticate, async (req, res) => {
     const feedbacks = await Feedback.find(filter).sort({ createdAt: -1 })
       .populate('questionId', 'text category difficulty questionType');
     res.json({ success: true, feedbacks });
+  } catch { res.status(500).json({ success: false, message: 'Server error' }); }
+});
+
+// ════════════════════════════════════════════════════════════
+//  User Interview History   /api/interviews/my-sessions
+//  Returns recent interview sessions for the current user (or anonymous by code)
+// ════════════════════════════════════════════════════════════
+app.get('/api/interviews/my-sessions', async (req, res) => {
+  try {
+    // Extract userId from token if present
+    let userId = null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.split(' ')[1];
+    if (token) {
+      try { const d = jwt.verify(token, JWT_SECRET); userId = d.userId; } catch {}
+    }
+
+    if (!userId) return res.json({ success: true, sessions: [] });
+
+    const sessions = await Interview.find({ userId })
+      .sort({ completedAt: -1 })
+      .limit(20)
+      .select('category difficulty overallScore totalPoints maxPossiblePoints totalQuestions completedQuestions totalTimeTaken completedAt');
+    res.json({ success: true, sessions });
   } catch { res.status(500).json({ success: false, message: 'Server error' }); }
 });
 

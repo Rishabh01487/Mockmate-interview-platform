@@ -83,8 +83,11 @@ function AppInner() {
       {page === 'auth' && <AuthPage onBack={() => setPage('home')} />}
       {page === 'home' && (
         <HomePage
+          user={user}
+          isLoggedIn={isLoggedIn}
           onStartInterview={() => isLoggedIn ? setPage('interview') : setPage('auth')}
           onOpenRoom={() => isLoggedIn ? setPage('room') : setPage('auth')}
+          onViewReport={goReport}
         />
       )}
       {page === 'interview' && <InterviewPage onGoHome={goHome} />}

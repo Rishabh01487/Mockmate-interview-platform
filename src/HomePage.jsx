@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { CATEGORIES } from './data/questions';
+import { API_BASE } from './config/api.js';
 
 // ---- SVG Icon Library ----
 const Icon = ({ name, size = 18, className = '' }) => {
@@ -355,13 +356,84 @@ const Footer = () => (
   </footer>
 );
 
+// ---- Past Sessions (only for logged-in users) ----
+const PastSessions = ({ isLoggedIn, onViewReport }) => {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    setLoading(true);
+    const token = localStorage.getItem('mm_token');
+    fetch(`${API_BASE}/api/interviews/my-sessions`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(data => { if (data.success) setSessions(data.sessions || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [isLoggedIn]);
+
+  if (!isLoggedIn || sessions.length === 0) return null;
+
+  const fmtTime = (sec) => `${Math.floor((sec || 0) / 60)}m`;
+
+  return (
+    <section className="past-sessions" style={{
+      padding: '3rem 1.5rem', maxWidth: 960, margin: '0 auto',
+    }}>
+      <div className="section-header" style={{ marginBottom: '1.5rem' }}>
+        <span className="section-eyebrow">History</span>
+        <h2 className="section-title">Your Past Sessions</h2>
+        <p className="section-subtitle">Review your completed interviews and track progress</p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        {sessions.map(s => (
+          <button key={s._id} onClick={() => onViewReport(s)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '1rem',
+              padding: '0.85rem 1.25rem',
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 12, cursor: 'pointer', textAlign: 'left', width: '100%',
+              transition: 'all 0.2s',
+            }}
+            onMouseOver={e => e.currentTarget.style.background = 'rgba(99,102,241,0.08)'}
+            onMouseOut={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+                {s.category || 'General'} · <span className={`ip-diff-badge ip-diff-badge--${(s.difficulty||'medium').toLowerCase()}`} style={{ fontSize: '0.65rem' }}>{s.difficulty || 'Medium'}</span>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4 }}>
+                {s.totalQuestions} questions · {s.completedQuestions} answered · {fmtTime(s.totalTimeTaken)}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#6366f1' }}>
+                {s.totalPoints || 0}<span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontWeight: 400 }}>/{s.maxPossiblePoints || 0}</span>
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                {s.overallScore || 0}%
+              </div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+};
+
 // ---- HomePage (default export) ----
-const HomePage = ({ onStartInterview, onOpenRoom }) => (
+const HomePage = ({ user, isLoggedIn, onStartInterview, onOpenRoom, onViewReport }) => (
   <div className="home-container">
     <Navbar onStartInterview={onStartInterview} onOpenRoom={onOpenRoom} />
     <Hero onStartInterview={onStartInterview} onOpenRoom={onOpenRoom} />
     <CategoriesStrip />
     <FeaturesSection />
+    <PastSessions isLoggedIn={isLoggedIn} onViewReport={onViewReport} />
     <HowItWorks />
     <CTASection onStartInterview={onStartInterview} />
     <Testimonials />

@@ -697,29 +697,30 @@ const InterviewPage = ({ onGoHome }) => {
       })
     }).catch(() => {});
 
-    // Persist to MongoDB (Interview + Analytics)
+    // Persist to MongoDB (Interview + Analytics) — works with or without auth
     const token = localStorage.getItem('mm_token');
-    if (token) {
-      fetch(`${API_BASE}/api/interviews/quick-save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          category,
-          difficulty,
-          totalTimeTaken: resp.reduce((s, r) => s + (r.timeTaken || 0), 0),
-          responses: resp.map(r => ({
-            question: r.question,
-            answer: r.answer || r.code || '',
-            code: r.code || '',
-            score: r.score,
-            isCorrect: r.isCorrect,
-            questionType: r.questionType,
-            difficulty: r.difficulty || difficulty,
-            timeTaken: r.timeTaken || 0,
-          })),
-        }),
-      }).catch(() => {});
-    }
+    fetch(`${API_BASE}/api/interviews/quick-save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        category,
+        difficulty,
+        totalTimeTaken: resp.reduce((s, r) => s + (r.timeTaken || 0), 0),
+        responses: resp.map(r => ({
+          question: r.question,
+          answer: r.answer || r.code || '',
+          code: r.code || '',
+          score: r.score,
+          isCorrect: r.isCorrect,
+          questionType: r.questionType,
+          difficulty: r.difficulty || difficulty,
+          timeTaken: r.timeTaken || 0,
+        })),
+      }),
+    }).catch(() => {});
   };
 
   const handleRestart = () => {
