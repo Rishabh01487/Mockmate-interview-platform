@@ -38,7 +38,7 @@ const LANGUAGES = [
 const DEFAULT_STARTERS = {
   javascript: '// Write your solution here\nfunction solution(input) {\n  \n}\n\nconsole.log(solution(""));',
   python:     '# Write your solution here\ndef solution(input_data):\n    pass\n\nprint(solution(""))',
-  cpp:        `class Solution {\npublic:\n    \n};`,
+  cpp:        `class Solution {\npublic:\n    void solve() {\n        \n    }\n};`,
   java:       'public class Solution {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}',
 };
 

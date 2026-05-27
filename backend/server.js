@@ -620,6 +620,24 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+//  LeetCode GraphQL Proxy — POST endpoint (used by CodeEditor useEffect)
+// ════════════════════════════════════════════════════════════
+app.post('/api/leetcode-graphql', async (req, res) => {
+  try {
+    const { query, variables } = req.body;
+    const response = await fetch('https://leetcode.com/graphql/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      body: JSON.stringify({ query, variables })
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.json({ data: null, errors: [{ message: err.message }] });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 //  AI Proxy — OpenAI-compatible (set AI_API_URL + AI_API_KEY + AI_MODEL)
 // ════════════════════════════════════════════════════════════
 const AI_BASE_URL = (process.env.AI_API_URL || 'https://openrouter.ai/api/v1').trim().replace(/\/$/, '');
