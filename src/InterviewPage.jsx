@@ -603,11 +603,9 @@ const InterviewPage = ({ onGoHome }) => {
   const startSession = async () => {
     setAiLoading(true);
 
-    // Map local questionType 'voice' → 'text' for filtering purposes
-    // Local bank has: 'voice' (theory) and 'coding' — NO 'mcq' questions
     const typeMap = { voice: 'text', text: 'text', mcq: 'mcq', coding: 'coding' };
 
-    // Step 1: Check local question pool from selected domain
+    // Step 1: Check local question pool
     const rawPool = (questions[category] || []).sort(() => Math.random() - 0.5);
     let localQs = rawPool.map(q => ({ ...q, questionType: typeMap[q.questionType] || 'text' }));
     if (questionType !== 'all') {
@@ -617,7 +615,46 @@ const InterviewPage = ({ onGoHome }) => {
       localQs = localQs.filter(q => q.difficulty === difficulty);
     }
 
-    // Step 2: If local is enough and AI not toggled, use local
+    // Step 1b: If coding questions are needed, supplement with LeetCode API
+    if (questionType === 'all' || questionType === 'coding') {
+      try {
+        const lcRes = await fetch('https://alfa-leetcode-api.onrender.com/problems?limit=2000');
+        const lcData = await lcRes.json();
+        if (lcData && lcData.problemsetQuestionList) {
+          const lcQs = lcData.problemsetQuestionList
+            .filter(q => !q.isPaidOnly)
+            .filter(q => !difficulty || q.difficulty.toLowerCase() === difficulty.toLowerCase())
+            .map((q, idx) => ({
+              id: `lc-${q.questionFrontendId || idx}`,
+              titleSlug: q.titleSlug,
+              questionType: 'coding',
+              question: q.title,
+              difficulty: q.difficulty,
+              tags: q.topicTags?.map(t => t.name) || [],
+              timeLimit: 1800,
+              problemStatement: `<h3>${q.title}</h3><p>Solve this problem on LeetCode or implement your solution here.</p><p>Title Slug: <code>${q.titleSlug}</code></p>`,
+              starterCode: {
+                javascript: `function ${(q.title||'').replace(/[^a-zA-Z0-9]/g,'')}() {\n  \n}`,
+                cpp: `class Solution {\npublic:\n  \n};`,
+                python: `def ${(q.title||'').replace(/[^a-zA-Z0-9]/g,'').replace(/^([^a-z])/,(_,c)=>c.toLowerCase())}():\n  pass`,
+                java: `class Solution {\n  public void ${(q.title||'').replace(/[^a-zA-Z0-9]/g,'').replace(/^./,c=>c.toLowerCase())}() {\n  }\n}`
+              }
+            }));
+          // Merge with local coding questions (avoid dupes by id)
+          const localIds = new Set(localQs.map(q => q.id));
+          for (const lc of lcQs) {
+            if (!localIds.has(lc.id)) {
+              localQs.push(lc);
+              localIds.add(lc.id);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Practice] LeetCode API fetch failed:', e.message);
+      }
+    }
+
+    // Step 2: If enough questions and AI not toggled, use local+LC
     if (localQs.length >= questionCount && !useAI) {
       setSessionQuestions(localQs.slice(0, questionCount));
       setStep('session');
@@ -625,7 +662,7 @@ const InterviewPage = ({ onGoHome }) => {
       return;
     }
 
-    // Step 3: Need AI for more questions (MCQ has ZERO local questions)
+    // Step 3: Supplement with AI
     const needed = Math.max(0, questionCount - localQs.length);
     if (needed > 0 || useAI) {
       try {
@@ -643,15 +680,12 @@ const InterviewPage = ({ onGoHome }) => {
           if (aiQs.length >= generateCount) break;
         }
         if (useAI) {
-          // AI-only mode: use only AI questions
           localQs = aiQs;
         } else {
-          // Supplement local with AI
           localQs = [...localQs, ...aiQs];
         }
       } catch (err) {
         console.warn('[Practice] AI generation error:', err.message);
-        // If MCQ was selected and AI failed, there are no local MCQs
         if (questionType === 'mcq' && localQs.length === 0) {
           alert('MCQ questions require AI generation. Please make sure the AI backend is reachable and try again.');
           setAiLoading(false);
@@ -660,7 +694,7 @@ const InterviewPage = ({ onGoHome }) => {
       }
     }
 
-    // Step 4: Start session with available questions
+    // Step 4: Start session
     const finalQs = localQs.slice(0, questionCount);
     if (!finalQs.length) {
       alert('No questions available. Please try a different combination or enable AI.');
