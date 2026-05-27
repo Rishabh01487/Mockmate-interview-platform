@@ -572,32 +572,48 @@ app.post('/api/compile', async (req, res) => {
   const { code, input } = req.body;
   if (!code) return res.status(400).json({ error: 'No code provided' });
 
-  try {
-    const start = Date.now();
-    const wandbox = await fetch(WANDBOX_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: wrapCode(code, !!(input && input.trim())),
-        compiler: 'gcc-head',
-        options: '-std=c++17',
-        stdin: input || '',
-        save: false,
-        compiler_option_raw: true,
-      }),
-    });
-    const result = await wandbox.json();
-    const execTime = Date.now() - start;
-    if (result.compiler_error) {
-      return res.json({ output: result.compiler_error, success: false });
+  const start = Date.now();
+  const MAX_RETRIES = 3;
+  const compiled = wrapCode(code, !!(input && input.trim()));
+  const body = {
+    code: compiled,
+    compiler: 'gcc-head',
+    options: '-std=c++17',
+    stdin: input || '',
+    save: false,
+    compiler_option_raw: true,
+  };
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
+      const wandbox = await fetch(WANDBOX_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await wandbox.json();
+      const execTime = Date.now() - start;
+
+      const errMsg = result.compiler_error || result.program_output || '';
+      if (errMsg.includes('Resource temporarily unavailable') || errMsg.includes('OCI runtime error')) {
+        if (attempt < MAX_RETRIES - 1) continue;
+        return res.json({ output: 'Wandbox is busy. Please try again.', success: false });
+      }
+
+      if (result.compiler_error) {
+        return res.json({ output: result.compiler_error, success: false });
+      }
+
+      return res.json({
+        output: result.program_output || result.program_message || '(no output)',
+        executionTime: `${execTime}ms`,
+        success: result.status === '0',
+      });
+    } catch (err) {
+      if (attempt < MAX_RETRIES - 1) continue;
+      res.json({ output: err.message, success: false });
     }
-    res.json({
-      output: result.program_output || result.program_message || '(no output)',
-      executionTime: `${execTime}ms`,
-      success: result.status === '0',
-    });
-  } catch (err) {
-    res.json({ output: err.message, success: false });
   }
 });
 
