@@ -111,7 +111,13 @@
 .ce-panel-body { flex: 1; overflow-y: auto; padding: 1.25rem; }
 
 .ce-problem-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.6rem; letter-spacing: -0.02em; }
-.ce-problem-statement { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.7; margin: 0.75rem 0; white-space: pre-wrap; }
+.ce-problem-statement { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.7; margin: 0.75rem 0; }
+.ce-problem-statement pre { background: var(--bg-tertiary); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.8rem; margin: 10px 0; }
+.ce-problem-statement code { background: var(--bg-tertiary); padding: 1px 5px; border-radius: 3px; font-size: 0.8rem; }
+.ce-problem-statement strong { font-weight: 600; color: var(--text-primary); }
+.ce-problem-statement ul, .ce-problem-statement ol { padding-left: 1.5rem; margin: 8px 0; }
+.ce-problem-statement li { margin-bottom: 4px; }
+.ce-problem-statement img { max-width: 100%; }
 .ce-section { margin-top: 1.1rem; }
 .ce-section-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.5rem; }
 .ce-constraints { padding-left: 1.1rem; display: flex; flex-direction: column; gap: 4px; }

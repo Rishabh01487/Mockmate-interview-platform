@@ -132,16 +132,18 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const [activeTab, setActiveTab] = useState('problem'); // 'problem' | 'testcases' | 'results'
   const [aiAnalysis, setAiAnalysis] = useState(null); // AI debug result
   const [aiLoading, setAiLoading] = useState(false);
+  const [leetCodeDesc, setLeetCodeDesc] = useState('');
 
   useEffect(() => {
     if (!readOnly && !submitted) {
       if (question?.titleSlug) {
         setCode('// Loading exact LeetCode parameters...');
-        const query = `query questionEditorData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`;
+        setLeetCodeDesc('');
+        const editorQuery = `query questionEditorData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`;
         fetch(`${API_BASE}/api/leetcode-graphql`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
+          body: JSON.stringify({ query: editorQuery, variables: { titleSlug: question.titleSlug } })
         })
           .then(res => res.json())
           .then(data => {
@@ -160,8 +162,22 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
           .catch(() => {
             setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
           });
+        // Also fetch full LeetCode description
+        const descQuery = `query questionContent($titleSlug: String!) { question(titleSlug: $titleSlug) { content title difficulty exampleTestcases topicTags { name slug } } }`;
+        fetch(`${API_BASE}/api/leetcode-graphql`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: descQuery, variables: { titleSlug: question.titleSlug } })
+        })
+          .then(res => res.json())
+          .then(data => {
+            const content = data?.data?.question?.content;
+            if (content) setLeetCodeDesc(content);
+          })
+          .catch(() => {});
       } else {
         setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
+        setLeetCodeDesc('');
       }
       setRunResults(null);
       setSubmitResults(null);
@@ -336,7 +352,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
                 <span className={`ip-diff-badge ip-diff-badge--${question.difficulty}`}>{question.difficulty}</span>
               )}
               <div className="ce-problem-statement">
-                {question?.problemStatement || question?.text}
+                {leetCodeDesc ? <div dangerouslySetInnerHTML={{ __html: leetCodeDesc }} /> : (question?.problemStatement || question?.text)}
               </div>
               {question?.constraints?.length > 0 && (
                 <div className="ce-section">
