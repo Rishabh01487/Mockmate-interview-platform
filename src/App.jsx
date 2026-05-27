@@ -72,7 +72,7 @@ function AppInner() {
           <span style={{ color: '#6b7280', fontSize: '0.78rem' }}>
             {user ? `👤 ${user?.name || user?.email}` : ''}
           </span>
-          <a href="https://zerotoone-plum.vercel.app" target="_blank" rel="noopener noreferrer"
+          <a href="https://zero-to-one-murex.vercel.app" target="_blank" rel="noopener noreferrer"
             style={{
               background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)',
               color: '#a5b4fc', borderRadius: 6, padding: '0.28rem 0.65rem',

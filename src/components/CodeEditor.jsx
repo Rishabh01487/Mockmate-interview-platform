@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import Editor from '@monaco-editor/react';
 import { API_BASE } from '../config/api.js';
 import { analyzeCode, isAiOnline } from '../services/aiService';
 
@@ -37,7 +38,7 @@ const LANGUAGES = [
 const DEFAULT_STARTERS = {
   javascript: '// Write your solution here\nfunction solution(input) {\n  \n}\n\nconsole.log(solution(""));',
   python:     '# Write your solution here\ndef solution(input_data):\n    pass\n\nprint(solution(""))',
-  cpp:        '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    \n    return 0;\n}',
+  cpp:        `class Solution {\npublic:\n    \n};`,
   java:       'public class Solution {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}',
 };
 
@@ -131,7 +132,6 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const [activeTab, setActiveTab] = useState('problem'); // 'problem' | 'testcases' | 'results'
   const [aiAnalysis, setAiAnalysis] = useState(null); // AI debug result
   const [aiLoading, setAiLoading] = useState(false);
-  const textareaRef = useRef(null);
 
   useEffect(() => {
     if (!readOnly && !submitted) {
@@ -150,7 +150,6 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
             const snip = snippets.find(s => s.langSlug === language || s.langSlug === (language==='cpp'?'cpp':'') || s.lang.toLowerCase() === language);
             if (snip) {
               let exactCode = snip.code;
-              if (language === 'cpp') exactCode = `#include <bits/stdc++.h>\nusing namespace std;\n\n${exactCode}`;
               if (language === 'java') exactCode = `import java.util.*;\n\n${exactCode}`;
               if (language === 'python') exactCode = `import math\nimport collections\n\n${exactCode}`;
               setCode(exactCode);
@@ -176,19 +175,6 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     setLanguage(lang);
     setCode(question?.starterCode?.[lang] || DEFAULT_STARTERS[lang]);
     setRunResults(null);
-  };
-
-  // Tab key inserts spaces
-  const handleKeyDown = (e) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const ta = textareaRef.current;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const newCode = code.substring(0, start) + '  ' + code.substring(end);
-      setCode(newCode);
-      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + 2; }, 0);
-    }
   };
 
   // AI Debug — full intelligent code review
@@ -231,6 +217,31 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
         executionTime: Math.floor(Math.random() * 50) + 10,
         error: r.error || '',
       }));
+    } else if (language === 'cpp') {
+      const cppResults = [];
+      for (const tc of visibleCases) {
+        try {
+          const res = await fetch(`${API_BASE}/api/compile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, input: tc.input })
+          });
+          const data = await res.json();
+          cppResults.push({
+            passed: data.success && data.output.trim() === (tc.expectedOutput || '').trim(),
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            actualOutput: data.success ? data.output : `Error: ${data.output}`,
+            executionTime: data.executionTime ? parseInt(data.executionTime) : 0,
+            error: data.success ? '' : data.output,
+          });
+        } catch (err) {
+          cppResults.push({ passed: false, input: tc.input, expectedOutput: tc.expectedOutput, actualOutput: `Error: ${err.message}`, executionTime: 0, error: err.message });
+        }
+      }
+      setRunResults(cppResults);
+      setRunning(false);
+      return;
     } else {
       results = await aiRun(language, code, question?.problemStatement || '', visibleCases);
     }
@@ -256,6 +267,29 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
           error: r.error || '',
         };
       });
+    } else if (language === 'cpp') {
+      const cppResults = [];
+      for (const tc of cases) {
+        try {
+          const res = await fetch(`${API_BASE}/api/compile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, input: tc.input })
+          });
+          const data = await res.json();
+          cppResults.push({
+            passed: data.success && data.output.trim() === (tc.expectedOutput || '').trim(),
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            actualOutput: data.success ? data.output : `Error: ${data.output}`,
+            executionTime: data.executionTime ? parseInt(data.executionTime) : 0,
+            error: data.success ? '' : data.output,
+          });
+        } catch (err) {
+          cppResults.push({ passed: false, input: tc.input, expectedOutput: tc.expectedOutput, actualOutput: `Error: ${err.message}`, executionTime: 0, error: err.message });
+        }
+      }
+      results = cppResults;
     } else {
       results = await aiRun(language, code, question?.problemStatement || '', cases);
     }
@@ -451,25 +485,30 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
         </div>
 
         {/* Code Area */}
-        <div className="ce-editor-wrap">
-          <div className="ce-line-numbers" aria-hidden="true">
-            {code.split('\n').map((_, i) => (
-              <span key={i}>{i + 1}</span>
-            ))}
-          </div>
-          <textarea
-            ref={textareaRef}
-            id="code-editor-textarea"
-            className="ce-textarea"
+        <div className="ce-editor-wrap" style={{ position: 'relative' }}>
+          <Editor
+            height="100%"
+            language={language === 'cpp' ? 'cpp' : language === 'javascript' ? 'javascript' : language === 'python' ? 'python' : language === 'java' ? 'java' : 'cpp'}
+            theme="vs"
             value={code}
-            onChange={e => !readOnly && !submitted && setCode(e.target.value)}
-            onKeyDown={handleKeyDown}
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            readOnly={readOnly || submitted}
-            aria-label="Code editor"
+            onChange={val => !readOnly && !submitted && setCode(val || '')}
+            options={{
+              fontSize: 14,
+              fontFamily: "'Courier New', monospace",
+              minimap: { enabled: false },
+              lineNumbers: 'on',
+              readOnly: readOnly || submitted,
+              scrollBeyondLastLine: false,
+              padding: { top: 12 },
+              automaticLayout: true,
+              autoClosingBrackets: 'always',
+              autoClosingQuotes: 'always',
+              autoClosingDelete: 'auto',
+              autoClosingOvertype: 'auto',
+              tabSize: 4,
+              renderWhitespace: 'selection',
+              cursorBlinking: 'smooth',
+            }}
           />
         </div>
 

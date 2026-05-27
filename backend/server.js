@@ -476,6 +476,132 @@ app.post('/api/live-rooms/:code/complete', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+//  C++ Compile API — proxies to Wandbox (used by CodeEditor)
+// ════════════════════════════════════════════════════════════
+const WANDBOX_URL = 'https://wandbox.org/api/compile.json';
+
+function typeName(t) {
+  return t.replace(/&/g, '').replace(/const/g, '').trim();
+}
+
+function generateMain(code, useStdin) {
+  const methodRe = /public:\s*\n?\s*(\w+(?:\s*<[^>]*>)?(?:\s*&)?)\s+(\w+)\s*\(([^)]*)\)/s;
+  const m = code.match(methodRe);
+  if (!m) return '';
+
+  const retType = typeName(m[1]);
+  const methodName = m[2];
+  const paramsStr = m[3].trim();
+
+  const params = [];
+  if (paramsStr) {
+    let depth = 0, cur = '';
+    for (const ch of paramsStr) {
+      if (ch === '<') depth++;
+      else if (ch === '>') depth--;
+      if (ch === ',' && depth === 0) { params.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    params.push(cur.trim());
+  }
+
+  const readLines = params.map(p => {
+    const parts = p.split(/\s+/);
+    const name = parts[parts.length - 1];
+    const rawType = parts.slice(0, -1).join(' ');
+    const t = typeName(rawType);
+    const nl = name.toLowerCase();
+
+    if (useStdin) {
+      if (t === 'int') return `  int ${name} = 0; cin >> ${name};`;
+      if (t.startsWith('vector<int>')) return `  int ${name}_n = 0; cin >> ${name}_n;\n  vector<int> ${name}(${name}_n);\n  for(auto& x : ${name}) cin >> x;`;
+      return `  ${rawType} ${name}; // Cannot auto-read`;
+    }
+
+    if (t === 'int' && (nl.includes('target') || nl.includes('sum'))) return `  int ${name} = 9;`;
+    if (t === 'int') return `  int ${name} = 0;`;
+    if (t.startsWith('vector<int>') && (nl.includes('nums') || nl.includes('arr'))) return `  vector<int> ${name} = {2, 7, 11, 15};`;
+    if (t.startsWith('vector<int>')) return `  vector<int> ${name} = {1, 2, 3};`;
+    if (t === 'string' || t === 'std::string') return `  string ${name};`;
+    return `  ${rawType} ${name}; // Unsupported`;
+  }).join('\n');
+
+  const paramNames = params.map(p => {
+    const parts = p.split(/\s+/);
+    return parts[parts.length - 1];
+  }).join(', ');
+
+  let printCode;
+  if (retType === 'void') {
+    printCode = `  sol.${methodName}(${paramNames});`;
+  } else if (retType === 'int' || retType === 'long long' || retType === 'double' || retType === 'float' || retType === 'char' || retType === 'bool' || retType === 'string' || retType === 'std::string') {
+    printCode = `  cout << sol.${methodName}(${paramNames}) << endl;`;
+  } else if (retType.startsWith('vector<int>') || retType.startsWith('vector<long long>') || retType.startsWith('vector<string>')) {
+    printCode = `  auto res = sol.${methodName}(${paramNames});\n  for (size_t i = 0; i < res.size(); i++) {\n    if (i) cout << ' ';\n    cout << res[i];\n  }`;
+  } else if (retType.startsWith('vector<vector<int>>')) {
+    printCode = `  auto res = sol.${methodName}(${paramNames});\n  for (auto& row : res) {\n    for (auto& x : row) cout << x << ' ';\n    cout << endl;\n  }`;
+  } else if (retType === 'bool') {
+    printCode = `  cout << (sol.${methodName}(${paramNames}) ? "true" : "false") << endl;`;
+  } else {
+    printCode = `  cout << sol.${methodName}(${paramNames}) << endl;`;
+  }
+
+  return `int main() {\n  Solution sol;\n${readLines}\n${printCode}\n  return 0;\n}`;
+}
+
+function wrapCode(code, useStdin) {
+  if (code.includes('int main(') || code.includes('main(')) return code;
+  const hasIncludes = code.includes('#include');
+  const hasNamespace = code.includes('using namespace');
+  const wrapped = [];
+  if (!hasIncludes) wrapped.push('#include <bits/stdc++.h>');
+  if (!hasNamespace) wrapped.push('using namespace std;');
+  wrapped.push('');
+  wrapped.push(code);
+  wrapped.push('');
+  const mainCode = generateMain(code, useStdin);
+  if (mainCode) {
+    wrapped.push(mainCode);
+  } else {
+    wrapped.push('int main() {\n  return 0;\n}');
+  }
+  return wrapped.join('\n');
+}
+
+app.post('/api/compile', async (req, res) => {
+  const { code, input } = req.body;
+  if (!code) return res.status(400).json({ error: 'No code provided' });
+
+  try {
+    const start = Date.now();
+    const wandbox = await fetch(WANDBOX_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: wrapCode(code, !!(input && input.trim())),
+        compiler: 'gcc-head',
+        options: '-std=c++17',
+        stdin: input || '',
+        save: false,
+        compiler_option_raw: true,
+      }),
+    });
+    const result = await wandbox.json();
+    const execTime = Date.now() - start;
+    if (result.compiler_error) {
+      return res.json({ output: result.compiler_error, success: false });
+    }
+    res.json({
+      output: result.program_output || result.program_message || '(no output)',
+      executionTime: `${execTime}ms`,
+      success: result.status === '0',
+    });
+  } catch (err) {
+    res.json({ output: err.message, success: false });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 //  LeetCode Live API Proxy
 // ════════════════════════════════════════════════════════════
 app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
@@ -498,7 +624,7 @@ app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 const AI_BASE_URL = (process.env.AI_API_URL || 'https://openrouter.ai/api/v1').trim().replace(/\/$/, '');
 const AI_KEY = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL = (process.env.AI_MODEL || 'openrouter/free').trim();
+const AI_MODEL = (process.env.AI_MODEL || 'nvidia/nemotron-nano-9b-v2:free').trim();
 
 console.log(`✓ AI Provider → ${AI_BASE_URL} (model: ${AI_MODEL})`);
 

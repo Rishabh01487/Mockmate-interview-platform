@@ -15,7 +15,7 @@ services:
       - key: AI_API_KEY
         sync: false          # Set in Render dashboard → your OpenRouter API key
       - key: AI_MODEL
-        value: openrouter/free
+        value: nvidia/nemotron-nano-9b-v2:free
       - key: CLIENT_URL
         sync: false          # Set in Render dashboard → your Vercel frontend URL
     healthCheckPath: /api/health

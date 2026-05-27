@@ -186,28 +186,9 @@
 
 .ce-editor-wrap {
   flex: 1; display: flex; overflow: hidden;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 0.85rem; line-height: 1.65;
+  min-height: 300px;
 }
-
-/* Line numbers */
-.ce-line-numbers {
-  padding: 0.75rem 0.6rem 0.75rem 0.75rem;
-  display: flex; flex-direction: column;
-  background: var(--bg-surface); border-right: 1px solid var(--border-subtle);
-  color: var(--text-muted); user-select: none; min-width: 42px;
-  font-size: 0.78rem; line-height: 1.65; text-align: right; overflow: hidden;
-}
-.ce-line-numbers span { display: block; }
-
-.ce-textarea {
-  flex: 1; padding: 0.75rem;
-  background: var(--bg-primary); border: none; outline: none;
-  color: var(--text-primary); resize: none; overflow-y: auto;
-  font-family: inherit; font-size: inherit; line-height: inherit;
-  tab-size: 2;
-}
-.ce-textarea:read-only { opacity: 0.75; cursor: default; }
+.ce-editor-wrap .monaco-editor { padding-top: 0; }
 
 .ce-actions {
   display: flex; gap: 0.5rem; padding: 0.6rem 0.75rem;
