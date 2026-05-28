@@ -36,10 +36,10 @@ const LANGUAGES = [
 ];
 
 const DEFAULT_STARTERS = {
-  javascript: '// Write your solution here\nfunction solution(input) {\n  \n}\n\nconsole.log(solution(""));',
-  python:     '# Write your solution here\ndef solution(input_data):\n    pass\n\nprint(solution(""))',
+  javascript: '/**\n * @param {...}\n * @return {...}\n */\nvar solution = function(input) {\n    \n};\n\nvar result = solution(input);\nconsole.log(JSON.stringify(result));',
+  python:     'class Solution:\n    def solve(self, input_data):\n        pass',
   cpp:        `class Solution {\npublic:\n    void solve() {\n        \n    }\n};`,
-  java:       'public class Solution {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}',
+  java:       'class Solution {\n    public void solve() {\n        \n    }\n}',
 };
 
 // ── Simple JS sandbox (for JavaScript only) ───────────────────
@@ -132,6 +132,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const [activeTab, setActiveTab] = useState('problem'); // 'problem' | 'testcases' | 'results'
   const [aiAnalysis, setAiAnalysis] = useState(null); // AI debug result
   const [aiLoading, setAiLoading] = useState(false);
+  const [derivedTestCases, setDerivedTestCases] = useState([]);
 
   useEffect(() => {
     if (!readOnly && !submitted) {
@@ -147,7 +148,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
           .then(data => {
             const snippets = data?.data?.question?.codeSnippets || [];
             if (!snippets || snippets.length === 0) throw new Error("No snippets found");
-            const snip = snippets.find(s => s.langSlug === language || s.langSlug === (language==='cpp'?'cpp':'') || s.lang.toLowerCase() === language);
+            const snip = snippets.find(s => s.langSlug === language || s.langSlug.replace(/\d+$/, '') === language || s.lang.toLowerCase() === language);
             if (snip) {
               let exactCode = snip.code;
               if (language === 'java') exactCode = `import java.util.*;\n\n${exactCode}`;
@@ -169,6 +170,34 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     }
   }, [question?.id, question?.titleSlug, language]);
 
+  // Fetch LeetCode example test cases when no explicit test cases exist
+  useEffect(() => {
+    if (!readOnly && !submitted && question?.titleSlug && (!question?.testCases || question.testCases.length === 0)) {
+      const query = `query questionData($titleSlug: String!) { question(titleSlug: $titleSlug) { exampleTestcases } }`;
+      fetch(`${API_BASE}/api/leetcode-graphql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
+      })
+        .then(res => res.json())
+        .then(data => {
+          const exampleStr = data?.data?.question?.exampleTestcases;
+          if (exampleStr) {
+            const lines = exampleStr.split('\n').filter(l => l.trim());
+            if (lines.length > 0) {
+              const groupSize = lines.length % 2 === 0 ? 2 : 1;
+              const cases = [];
+              for (let i = 0; i < lines.length; i += groupSize) {
+                cases.push({ input: lines.slice(i, i + groupSize).join('\n'), expectedOutput: '', isHidden: false });
+              }
+              setDerivedTestCases(cases);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [question?.id, question?.titleSlug]);
+
   // Switch language → load starter code
   const switchLanguage = (lang) => {
     if (submitted) return;
@@ -184,7 +213,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     setActiveTab('results');
     try {
       const problemText = question?.problemStatement || question?.question || question?.text || 'Solve the given problem';
-      const testCasesForAI = (question?.testCases || []).slice(0, 3);
+      const testCasesForAI = (question?.testCases?.length ? question.testCases : derivedTestCases).slice(0, 3);
       // If no test cases, create a placeholder so AI still reviews the code
       if (testCasesForAI.length === 0 && question?.examples?.length > 0) {
         question.examples.slice(0, 2).forEach(ex => {
@@ -197,26 +226,32 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
       setAiAnalysis({ error: err.message, compiles: false, bugs: ['Failed to connect to AI engine — make sure backend is running on port 5000'], suggestions: [], overallVerdict: 'error', score: 0 });
     }
     setAiLoading(false);
-  }, [code, language, question]);
+  }, [code, language, question, derivedTestCases]);
 
   // Run against visible test cases only
   const handleRun = useCallback(async () => {
     setRunning(true);
     setActiveTab('results');
-    const visibleCases = (question?.testCases || []).filter(tc => !tc.isHidden).slice(0, 3);
+    const allTestCases = (question?.testCases?.length ? question.testCases : derivedTestCases);
+    const visibleCases = allTestCases.filter(tc => !tc.isHidden).slice(0, 3);
     if (!visibleCases.length) {
-      visibleCases.push({ input: 'sample input', expectedOutput: 'sample output', isHidden: false });
+      setRunResults([{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available for this problem.', executionTime: 0, error: 'No test cases' }]);
+      setRunning(false);
+      return;
     }
     let results;
     if (language === 'javascript') {
-      results = visibleCases.map(tc => runJavaScript(code, tc.input)).map((r, i) => ({
-        passed: !r.error && r.output.trim() === visibleCases[i].expectedOutput.trim(),
-        input: visibleCases[i].input,
-        expectedOutput: visibleCases[i].expectedOutput,
-        actualOutput: r.error ? `Error: ${r.error}` : r.output,
-        executionTime: Math.floor(Math.random() * 50) + 10,
-        error: r.error || '',
-      }));
+      results = visibleCases.map(tc => runJavaScript(code, tc.input)).map((r, i) => {
+        const expOut = (visibleCases[i].expectedOutput || '').trim();
+        return {
+          passed: !r.error && (!expOut || r.output.trim() === expOut),
+          input: visibleCases[i].input,
+          expectedOutput: visibleCases[i].expectedOutput,
+          actualOutput: r.error ? `Error: ${r.error}` : r.output,
+          executionTime: Math.floor(Math.random() * 50) + 10,
+          error: r.error || '',
+        };
+      });
     } else if (language === 'cpp') {
       const cppResults = [];
       for (const tc of visibleCases) {
@@ -227,8 +262,9 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
             body: JSON.stringify({ code, input: tc.input })
           });
           const data = await res.json();
+          const expOut = (tc.expectedOutput || '').trim();
           cppResults.push({
-            passed: data.success && data.output.trim() === (tc.expectedOutput || '').trim(),
+            passed: data.success && (!expOut || data.output.trim() === expOut),
             input: tc.input,
             expectedOutput: tc.expectedOutput,
             actualOutput: data.success ? data.output : `Error: ${data.output}`,
@@ -247,19 +283,28 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     }
     setRunResults(results);
     setRunning(false);
-  }, [code, language, question]);
+  }, [code, language, question, derivedTestCases]);
 
   // Submit — runs against ALL test cases
   const handleSubmit = useCallback(async () => {
     setRunning(true);
-    const allCases = question?.testCases || [];
-    const cases = allCases.length ? allCases : [{ input: 'test', expectedOutput: 'output', isHidden: false }];
+    const allCases = (question?.testCases?.length ? question.testCases : derivedTestCases);
+    if (!allCases.length) {
+      setSubmitResults({ language, code, testResults: [{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available for this problem.', executionTime: 0, error: 'No test cases' }], passedCount: 0, totalTests: 0, score: 0, status: 'runtime_error' });
+      setSubmitted(true);
+      setActiveTab('results');
+      setRunning(false);
+      onSubmit && onSubmit({ language, code, testResults: [{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available.', executionTime: 0, error: 'No test cases' }], passedCount: 0, totalTests: 0, score: 0, status: 'runtime_error' });
+      return;
+    }
+    const cases = allCases;
     let results;
     if (language === 'javascript') {
       results = cases.map(tc => {
         const r = runJavaScript(code, tc.input);
+        const expOut = (tc.expectedOutput || '').trim();
         return {
-          passed: !r.error && r.output.trim() === (tc.expectedOutput || '').trim(),
+          passed: !r.error && (!expOut || r.output.trim() === expOut),
           input: tc.input,
           expectedOutput: tc.expectedOutput,
           actualOutput: r.error ? `Error: ${r.error}` : r.output,
@@ -277,8 +322,9 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
             body: JSON.stringify({ code, input: tc.input })
           });
           const data = await res.json();
+          const expOut = (tc.expectedOutput || '').trim();
           cppResults.push({
-            passed: data.success && data.output.trim() === (tc.expectedOutput || '').trim(),
+            passed: data.success && (!expOut || data.output.trim() === expOut),
             input: tc.input,
             expectedOutput: tc.expectedOutput,
             actualOutput: data.success ? data.output : `Error: ${data.output}`,
@@ -305,9 +351,9 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     setActiveTab('results');
     setRunning(false);
     onSubmit && onSubmit(result);
-  }, [code, language, question, onSubmit]);
+  }, [code, language, question, derivedTestCases, onSubmit]);
 
-  const testCases = (question?.testCases || []).filter(tc => !tc.isHidden);
+  const testCases = (question?.testCases?.length ? question.testCases : derivedTestCases).filter(tc => !tc.isHidden);
   const examples  = question?.examples || [];
 
   return (
