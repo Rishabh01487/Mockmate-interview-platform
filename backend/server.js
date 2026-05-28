@@ -480,6 +480,10 @@ app.post('/api/live-rooms/:code/complete', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 const WANDBOX_URL = 'https://wandbox.org/api/compile.json';
 
+function stripANSI(s) {
+  return s.replace(/\u001b\[.*?m/g, '').replace(/\u001b\[.*?[A-Za-z]/g, '');
+}
+
 function typeName(t) {
   return t.replace(/&/g, '').replace(/const/g, '').trim();
 }
@@ -604,18 +608,18 @@ app.post('/api/compile', async (req, res) => {
       const result = await wandbox.json();
       const execTime = Date.now() - start;
 
-      const errMsg = result.compiler_error || result.program_output || '';
+      const errMsg = stripANSI(result.compiler_error || result.program_output || '');
       if (errMsg.includes('Resource temporarily unavailable') || errMsg.includes('OCI runtime error')) {
         if (attempt < MAX_RETRIES - 1) continue;
         return res.json({ output: 'Wandbox is busy. Please try again.', success: false });
       }
 
       if (result.compiler_error) {
-        return res.json({ output: result.compiler_error, success: false });
+        return res.json({ output: stripANSI(result.compiler_error), success: false });
       }
 
       return res.json({
-        output: result.program_output || result.program_message || '(no output)',
+        output: stripANSI(result.program_output || result.program_message || '(no output)'),
         executionTime: `${execTime}ms`,
         success: result.status === '0',
       });
