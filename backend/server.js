@@ -658,7 +658,7 @@ app.post('/api/leetcode-graphql', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 const AI_BASE_URL = (process.env.AI_API_URL || 'https://openrouter.ai/api/v1').trim().replace(/\/$/, '');
 const AI_KEY = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL = (process.env.AI_MODEL || 'nvidia/nemotron-nano-9b-v2:free').trim();
+const AI_MODEL = (process.env.AI_MODEL || 'moonshotai/kimi-k2').trim();
 
 console.log(`✓ AI Provider → ${AI_BASE_URL} (model: ${AI_MODEL})`);
 
