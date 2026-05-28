@@ -133,6 +133,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const [aiAnalysis, setAiAnalysis] = useState(null); // AI debug result
   const [aiLoading, setAiLoading] = useState(false);
   const [derivedTestCases, setDerivedTestCases] = useState([]);
+  const [fetchedDescription, setFetchedDescription] = useState('');
 
   useEffect(() => {
     if (!readOnly && !submitted) {
@@ -192,6 +193,42 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
               }
               setDerivedTestCases(cases);
             }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [question?.id, question?.titleSlug]);
+
+  // Fetch full LeetCode question description
+  useEffect(() => {
+    if (!readOnly && !submitted && question?.titleSlug && !fetchedDescription) {
+      const query = `query questionContent($titleSlug: String!) { question(titleSlug: $titleSlug) { content } }`;
+      fetch(`${API_BASE}/api/leetcode-graphql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
+      })
+        .then(res => res.json())
+        .then(data => {
+          const html = data?.data?.question?.content || '';
+          if (html) {
+            const md = html
+              .replace(/<pre>\s*<code>/g, '```\n')
+              .replace(/<\/code>\s*<\/pre>/g, '\n```')
+              .replace(/<code>(.*?)<\/code>/g, '`$1`')
+              .replace(/<strong>(.*?)<\/strong>/g, '**$1**')
+              .replace(/<em>(.*?)<\/em>/g, '*$1*')
+              .replace(/<p>/g, '\n\n').replace(/<\/p>/g, '')
+              .replace(/<br\s*\/?>/g, '\n')
+              .replace(/<li>/g, '• ').replace(/<\/li>/g, '')
+              .replace(/<ul>/g, '').replace(/<\/ul>/g, '')
+              .replace(/<ol>/g, '').replace(/<\/ol>/g, '')
+              .replace(/<h3>(.*?)<\/h3>/g, '**$1**')
+              .replace(/<h[1-6]>.*?<\/h[1-6]>/g, '')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+              .replace(/\n{3,}/g, '\n\n').trim();
+            setFetchedDescription(md);
           }
         })
         .catch(() => {});
@@ -382,7 +419,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
                 <span className={`ip-diff-badge ip-diff-badge--${question.difficulty}`}>{question.difficulty}</span>
               )}
               <div className="ce-problem-statement">
-                {question?.problemStatement || question?.text}
+                {fetchedDescription || question?.problemStatement || question?.text}
               </div>
               {question?.constraints?.length > 0 && (
                 <div className="ce-section">

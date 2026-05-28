@@ -577,8 +577,8 @@ app.post('/api/compile', async (req, res) => {
   const compiled = wrapCode(code, !!(input && input.trim()));
   const body = {
     code: compiled,
-    compiler: 'gcc-head',
-    options: '-std=c++17',
+    compiler: 'clang-head',
+    options: '-std=c++23 -O2 -fsanitize=address -stdlib=libstdc++',
     stdin: input || '',
     save: false,
     compiler_option_raw: true,
