@@ -549,12 +549,21 @@ function generateMain(code, useStdin) {
   return `int main() {\n  Solution sol;\n${readLines}\n${printCode}\n  return 0;\n}`;
 }
 
+const STD_HEADERS = [
+  'algorithm','array','bitset','cassert','cctype','chrono','climits','cmath',
+  'cstdint','cstdio','cstdlib','cstring','ctime','deque','forward_list','fstream',
+  'functional','iomanip','ios','iostream','istream','iterator','limits','list',
+  'locale','map','memory','mutex','numeric','ostream','queue','random','regex',
+  'set','sstream','stack','stdexcept','streambuf','string','thread','tuple',
+  'type_traits','typeinfo','unordered_map','unordered_set','utility','valarray','vector'
+].map(h => `#include <${h}>`).join('\n');
+
 function wrapCode(code, useStdin) {
   if (code.includes('int main(') || code.includes('main(')) return code;
   const hasIncludes = code.includes('#include');
   const hasNamespace = code.includes('using namespace');
   const wrapped = [];
-  if (!hasIncludes) wrapped.push('#include <bits/stdc++.h>');
+  if (!hasIncludes) wrapped.push(STD_HEADERS);
   if (!hasNamespace) wrapped.push('using namespace std;');
   wrapped.push('');
   wrapped.push(code);
