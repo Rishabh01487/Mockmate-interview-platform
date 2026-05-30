@@ -581,6 +581,7 @@ function genHelpers(types) {
 }
 
 function generateMain(code, useStdin) {
+  const className = (code.match(/class\s+(\w+)/)||[])[1]||'Solution';
   const methodRe = /public\s*:\s*\n?\s*(.+?)\s+(\w+)\s*\(([^()]*)\)/s;
   const m = code.match(methodRe);
   if (!m) return '';
@@ -633,7 +634,7 @@ function generateMain(code, useStdin) {
     body += `  cout<<__fmt_${a}(sol.${methodName}(${args}))<<endl;\n`;
   }
 
-  return genHelpers(typeAbbrs) + `int main(){\n  Solution sol;\n${body}  return 0;\n}`;
+  return genHelpers(typeAbbrs) + `int main(){\n  ${className} sol;\n${body}  return 0;\n}`;
 }
 
 function defaultVal(t, name) {
