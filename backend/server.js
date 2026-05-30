@@ -601,9 +601,10 @@ function generateMain(code, useStdin) {
 
   let body = '';
   if (useStdin) {
+    body += `  string __l;\n`;
     for (const {name,type} of parsed) {
       const a = typeToAbbr(type);
-      body += `  { string __l; getline(cin,__l); auto ${name}=__p_${a}(__l); }\n`;
+      body += `  getline(cin,__l); auto ${name}=__p_${a}(__l);\n`;
     }
   } else {
     for (const {name,type} of parsed) {
