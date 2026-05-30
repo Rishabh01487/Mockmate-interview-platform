@@ -515,8 +515,12 @@ function abbrToType(a) {
 function genHelpers(types) {
   if (types.has('ln')) types.add('vi');
   if (types.has('tn')) types.add('vs');
+  const prio = ['i','ll','d','f','c','b','s','ln','tn'];
+  const sorted = [];
+  for (const a of prio) { if (types.has(a)) { sorted.push(a); types.delete(a); } }
+  sorted.push(...Array.from(types).sort((a,b)=>a.length-b.length));
   let code = '';
-  for (const a of types) {
+  for (const a of sorted) {
     if (a==='i') {
       code+=`int __p_i(const string& s){return stoi(s);}\n`;
       code+=`string __fmt_i(int v){return to_string(v);}\n`;
