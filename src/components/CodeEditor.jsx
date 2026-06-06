@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { API_BASE } from '../config/api.js';
 import { analyzeCode, isAiOnline } from '../services/aiService';
@@ -40,6 +40,60 @@ const DEFAULT_STARTERS = {
   python:     'class Solution:\n    def solve(self, input_data):\n        pass',
   cpp:        `class Solution {\npublic:\n    void solve() {\n        \n    }\n};`,
   java:       'class Solution {\n    public void solve() {\n        \n    }\n}',
+};
+
+const LEETCODE_STUBS = {
+  cpp: `/**
+ * Definition for singly-linked list.
+ * struct ListNode {
+ *     int val;
+ *     ListNode *next;
+ *     ListNode() : val(0), next(nullptr) {}
+ *     ListNode(int x) : val(x), next(nullptr) {}
+ *     ListNode(int x, ListNode *next) : val(x), next(next) {}
+ * };
+ */
+class Solution {
+public:
+    ListNode* swapPairs(ListNode* head) {
+        
+    }
+};`,
+  java: `/**
+ * Definition for singly-linked list.
+ * public class ListNode {
+ *     int val;
+ *     ListNode next;
+ *     ListNode() {}
+ *     ListNode(int val) { this.val = val; }
+ *     ListNode(int val, ListNode next) { this.val = val; this.next = next; }
+ * }
+ */
+class Solution {
+    public ListNode swapPairs(ListNode head) {
+        
+    }
+}`,
+  python: `# Definition for singly-linked list.
+# class ListNode:
+#     def __init__(self, val=0, next=None):
+#         self.val = val
+#         self.next = next
+class Solution:
+    def swapPairs(self, head: Optional[ListNode]) -> Optional[ListNode]:
+        
+`,
+  javascript: `/**
+ * Definition for singly-linked list.
+ * function ListNode(val, next) {
+ *     this.val = (val===undefined ? 0 : val)
+ *     this.next = (next===undefined ? null : next)
+ * }
+ */
+var swapPairs = function(head) {
+    
+};
+`,
 };
 
 // ── Judge pipeline helper ─────────────────────────────────────
@@ -94,42 +148,20 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const [derivedTestCases, setDerivedTestCases] = useState([]);
   const [fetchedDescription, setFetchedDescription] = useState('');
   const [vergeLight, setVergeLight] = useState(false);
+  const defaultCodeRef = useRef(false);
 
+  // Set LeetCode skeleton once per problem
   useEffect(() => {
     if (!readOnly && !submitted) {
-      if (question?.titleSlug) {
-        setCode('// Loading exact LeetCode parameters...');
-        const query = `query questionEditorData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`;
-        fetch(`${API_BASE}/api/leetcode-graphql`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
-        })
-          .then(res => res.json())
-          .then(data => {
-            const snippets = data?.data?.question?.codeSnippets || [];
-            if (!snippets || snippets.length === 0) throw new Error("No snippets found");
-            const snip = snippets.find(s => s.langSlug === language || s.langSlug.replace(/\d+$/, '') === language || s.lang.toLowerCase() === language);
-            if (snip) {
-              let exactCode = snip.code;
-              if (language === 'java') exactCode = `import java.util.*;\n\n${exactCode}`;
-              if (language === 'python') exactCode = `import math\nimport collections\n\n${exactCode}`;
-              setCode(exactCode);
-            } else {
-              setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
-            }
-          })
-          .catch(() => {
-            setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
-          });
-      } else {
-        setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language]);
-      }
+      defaultCodeRef.current = false;
+      const stub = LEETCODE_STUBS[language] || DEFAULT_STARTERS[language];
+      setCode(stub);
+      defaultCodeRef.current = true;
       setRunResults(null);
       setSubmitResults(null);
       setActiveTab('problem');
     }
-  }, [question?.id, question?.titleSlug, language]);
+  }, [question?.id, question?.titleSlug]);
 
   // Fetch LeetCode example test cases when no explicit test cases exist
   useEffect(() => {
@@ -211,7 +243,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const switchLanguage = (lang) => {
     if (submitted) return;
     setLanguage(lang);
-    setCode(question?.starterCode?.[lang] || DEFAULT_STARTERS[lang]);
+    setCode(LEETCODE_STUBS[lang] || question?.starterCode?.[lang] || DEFAULT_STARTERS[lang]);
     setRunResults(null);
   };
 
