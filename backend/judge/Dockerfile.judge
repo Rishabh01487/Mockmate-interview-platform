@@ -1,0 +1,23 @@
+# ──────────────────────────────────────────────────────────────
+#  Judge Pipeline — Multi-language sandbox runner
+#  Base image: Debian with gcc-14, openjdk-21, node 22, python3.12
+# ──────────────────────────────────────────────────────────────
+
+FROM debian:bookworm-slim AS judge-base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates gnupg \
+    build-essential gcc-14 g++-14 \
+    openjdk-21-jdk-headless \
+    python3.12 python3.12-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /judge
+COPY . .
+
+EXPOSE 4000
+CMD ["node", "server.js"]
