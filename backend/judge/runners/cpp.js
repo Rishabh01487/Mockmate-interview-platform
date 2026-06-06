@@ -177,15 +177,21 @@ const STD_HEADERS = [
   'type_traits','typeinfo','unordered_map','unordered_set','utility','valarray','vector'
 ].map(h => `#include <${h}>`).join('\n');
 
+function stripComments(s) {
+  return s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+}
+
 function wrapCode(code) {
   if (code.includes('int main(') || code.includes('main(')) return code;
-  const hasIncludes = code.includes('#include');
-  const hasNamespace = code.includes('using namespace');
+  const stripped = stripComments(code);
+  const hasIncludes = stripped.includes('#include');
+  const hasNamespace = stripped.includes('using namespace');
+  const hasStructDef = stripped.includes('struct ListNode') || stripped.includes('struct TreeNode');
   const wrapped = [];
   if (!hasIncludes) wrapped.push(STD_HEADERS);
   if (!hasNamespace) wrapped.push('using namespace std;');
   wrapped.push('');
-  wrapped.push(LEETCODE_HEADER);
+  if (!hasStructDef) wrapped.push(LEETCODE_HEADER);
   wrapped.push(code);
   wrapped.push('');
   const mainCode = generateMain(code);
