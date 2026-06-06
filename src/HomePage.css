@@ -4,6 +4,40 @@
 
 @import url('./App.css');
 
+/* ── Home container & background ── */
+.home-container { position: relative; overflow-x: hidden; }
+
+.home-bg {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+}
+
+.home-bg::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(30,111,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,111,255,0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+}
+
+.home-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.12;
+  animation: orbFloat 14s ease-in-out infinite;
+}
+.home-orb-1 { width: 600px; height: 600px; background: #1e6fff; top: 15%; left: 20%; animation-delay: 0s; }
+.home-orb-2 { width: 500px; height: 500px; background: #4d8fff; bottom: 20%; right: 15%; animation-delay: 5s; }
+.home-orb-3 { width: 400px; height: 400px; background: #1e6fff; top: 50%; left: 50%; transform: translate(-50%,-50%); opacity: 0.06; animation-delay: 10s; }
+
+@keyframes orbFloat {
+  0%,  100% { transform: translate(0, 0); }
+  33%        { transform: translate(28px, -28px); }
+  66%        { transform: translate(-18px, 18px); }
+}
+
 /* ============================================
    Navbar
    ============================================ */

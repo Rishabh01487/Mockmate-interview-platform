@@ -429,6 +429,11 @@ const PastSessions = ({ isLoggedIn, onViewReport }) => {
 // ---- HomePage (default export) ----
 const HomePage = ({ user, isLoggedIn, onStartInterview, onOpenRoom, onViewReport }) => (
   <div className="home-container">
+    <div className="home-bg">
+      <div className="home-orb home-orb-1" />
+      <div className="home-orb home-orb-2" />
+      <div className="home-orb home-orb-3" />
+    </div>
     <Navbar onStartInterview={onStartInterview} onOpenRoom={onOpenRoom} />
     <Hero onStartInterview={onStartInterview} onOpenRoom={onOpenRoom} />
     <CategoriesStrip />
