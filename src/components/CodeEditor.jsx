@@ -134,6 +134,7 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const [aiLoading, setAiLoading] = useState(false);
   const [derivedTestCases, setDerivedTestCases] = useState([]);
   const [fetchedDescription, setFetchedDescription] = useState('');
+  const [vergeLight, setVergeLight] = useState(false);
 
   useEffect(() => {
     if (!readOnly && !submitted) {
@@ -471,9 +472,13 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
 
               {/* AI Debug Analysis Panel */}
               {aiAnalysis && (
-                <div className="ce-ai-analysis">
+                <div className={`ce-ai-analysis${vergeLight ? ' ce-ai-analysis--light' : ''}`}>
                   <div className="ce-ai-header">
                     <AIIcon /> <strong>Verge1.o Code Analysis</strong>
+                    <button className="ce-ai-light-toggle" onClick={() => setVergeLight(v => !v)} title="Toggle light mode"
+                      style={{ background: 'none', border: '1px solid currentColor', borderRadius: 6, padding: '2px 8px', fontSize: '0.7rem', cursor: 'pointer', color: 'inherit', opacity: 0.6 }}>
+                      {vergeLight ? '🌙' : '☀️'}
+                    </button>
                     <span className={`ce-ai-verdict ${aiAnalysis.overallVerdict === 'accepted' ? 'ce-badge--pass' : 'ce-badge--fail'}`}>
                       {aiAnalysis.overallVerdict?.toUpperCase() || 'UNKNOWN'} — {aiAnalysis.score ?? 0}%
                     </span>
