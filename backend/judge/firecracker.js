@@ -2,7 +2,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { HEADER: CPP_HDR, MAIN: CPP_MAIN } = require('./templates/cpp');
+const { HEADER: CPP_HDR, generateMain } = require('./templates/cpp');
 
 const WANDBOX_URL = 'https://wandbox.org/api/compile.json';
 
@@ -26,7 +26,8 @@ async function compileLocal(code, input) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-'));
   try {
     const src = path.join(tmpDir, 'user.cpp');
-    const fullCode = [CPP_HDR, code, CPP_MAIN].join('\n');
+    const mainCode = generateMain(code);
+    const fullCode = [CPP_HDR, code, mainCode].join('\n');
     fs.writeFileSync(src, fullCode, 'utf8');
     execSync(`g++ -std=c++17 -O2 -s "${src}" -o "${tmpDir}/sol"`, { stdio: 'pipe', timeout: 15000 });
     const out = execSync(`"${tmpDir}/sol"`, { input, timeout: 5000, maxBuffer: 50 * 1024 * 1024 });
@@ -43,8 +44,9 @@ async function compileLocal(code, input) {
 }
 
 async function compileWandbox(code, input) {
+  const mainCode = generateMain(code);
   const body = {
-    code: [CPP_HDR, code, CPP_MAIN].join('\n'),
+    code: [CPP_HDR, code, mainCode].join('\n'),
     compiler: 'clang-head',
     options: '-std=c++17 -O2 -stdlib=libstdc++',
     stdin: input || '',
