@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { API_BASE } from '../config/api.js';
 import { analyzeCode, isAiOnline } from '../services/aiService';
@@ -42,71 +42,30 @@ const DEFAULT_STARTERS = {
   java:       'class Solution {\n    public void solve() {\n        \n    }\n}',
 };
 
-// ── Simple JS sandbox (for JavaScript only) ───────────────────
-function runJavaScript(code, input) {
-  const logs = [];
-  const sandbox = {
-    console: { log: (...a) => logs.push(a.map(String).join(' ')), error: (...a) => logs.push('[ERR] ' + a.join(' ')) },
-    input,
-  };
+// ── Judge pipeline helper ─────────────────────────────────────
+async function judgeRun(language, code, testCases) {
   try {
-    const fn = new Function(...Object.keys(sandbox), code);
-    fn(...Object.values(sandbox));
-    return { output: logs.join('\n') || '(no output)', error: null };
-  } catch (e) {
-    return { output: '', error: e.message };
+    const res = await fetch(`${API_BASE}/api/judge/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language, code, input: testCases.input, expectedOutput: testCases.expectedOutput })
+    });
+    return await res.json();
+  } catch (err) {
+    return { passed: false, status: 'runtime_error', error: err.message, actualOutput: `Error: ${err.message}` };
   }
 }
 
-// AI-powered code analysis for non-JS languages (replaces mock runner)
-async function aiRun(language, code, problemStatement, testCases) {
+async function judgeSubmit(language, code, testCases, questionId) {
   try {
-    const online = await isAiOnline();
-    if (!online) {
-      // Fallback: return placeholder results when AI is offline
-      return testCases.map((tc) => ({
-        passed: false,
-        input: tc.input,
-        expectedOutput: tc.expectedOutput,
-        actualOutput: '[Verge1.o Offline] AI compilation not available',
-        executionTime: 0,
-        error: 'AI engine not reachable',
-      }));
-    }
-
-    const analysis = await analyzeCode(code, language, problemStatement, testCases);
-    
-    // Map AI analysis results to the expected format
-    if (analysis.testResults && analysis.testResults.length > 0) {
-      return analysis.testResults.map((tr, i) => ({
-        passed: tr.passed,
-        input: tr.input || testCases[i]?.input || '',
-        expectedOutput: tr.expectedOutput || testCases[i]?.expectedOutput || '',
-        actualOutput: tr.actualOutput || '(AI could not determine output)',
-        executionTime: Math.floor(Math.random() * 50) + 10,
-        error: tr.passed ? '' : (tr.explanation || ''),
-      }));
-    }
-
-    // If AI returned no test results, use overall verdict
-    return testCases.map((tc) => ({
-      passed: analysis.overallVerdict === 'accepted',
-      input: tc.input,
-      expectedOutput: tc.expectedOutput,
-      actualOutput: analysis.overallVerdict === 'accepted' ? tc.expectedOutput : '[AI] Logic error detected',
-      executionTime: Math.floor(Math.random() * 50) + 10,
-      error: analysis.bugs?.join('; ') || '',
-    }));
+    const res = await fetch(`${API_BASE}/api/judge/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language, code, testCases, questionId })
+    });
+    return await res.json();
   } catch (err) {
-    console.error('AI analysis failed:', err);
-    return testCases.map((tc) => ({
-      passed: false,
-      input: tc.input,
-      expectedOutput: tc.expectedOutput,
-      actualOutput: `[AI Error] ${err.message}`,
-      executionTime: 0,
-      error: err.message,
-    }));
+    return { testResults: testCases.map(() => ({ passed: false, status: 'runtime_error', error: err.message })), passedCount: 0, totalTests: testCases.length, score: 0, status: 'runtime_error' };
   }
 }
 
@@ -200,6 +159,18 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     }
   }, [question?.id, question?.titleSlug]);
 
+  // Register test suites with judge backend
+  useEffect(() => {
+    const allCases = (question?.testCases?.length ? question.testCases : derivedTestCases);
+    if (allCases.length > 0 && question?.id) {
+      fetch(`${API_BASE}/api/judge/test-suites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionId: question.id, testCases: allCases })
+      }).catch(() => {});
+    }
+  }, [question?.id, question?.testCases, derivedTestCases]);
+
   // Fetch full LeetCode question description
   useEffect(() => {
     if (!readOnly && !submitted && question?.titleSlug && !fetchedDescription) {
@@ -277,47 +248,18 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
       setRunning(false);
       return;
     }
-    let results;
-    if (language === 'javascript') {
-      results = visibleCases.map(tc => runJavaScript(code, tc.input)).map((r, i) => {
-        const expOut = (visibleCases[i].expectedOutput || '').trim();
-        return {
-          passed: !r.error && (!expOut || r.output.trim() === expOut),
-          input: visibleCases[i].input,
-          expectedOutput: visibleCases[i].expectedOutput,
-          actualOutput: r.error ? `Error: ${r.error}` : r.output,
-          executionTime: Math.floor(Math.random() * 50) + 10,
-          error: r.error || '',
-        };
+    const results = [];
+    for (const tc of visibleCases) {
+      const r = await judgeRun(language, code, tc);
+      results.push({
+        passed: r.passed,
+        status: r.status,
+        input: tc.input,
+        expectedOutput: tc.expectedOutput,
+        actualOutput: r.actualOutput || r.error || '(no output)',
+        executionTime: r.executionTime || 0,
+        error: r.error || '',
       });
-    } else if (language === 'cpp') {
-      const cppResults = [];
-      for (const tc of visibleCases) {
-        try {
-          const res = await fetch(`${API_BASE}/api/compile`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code, input: tc.input })
-          });
-          const data = await res.json();
-          const expOut = (tc.expectedOutput || '').trim();
-          cppResults.push({
-            passed: data.success && (!expOut || data.output.trim() === expOut),
-            input: tc.input,
-            expectedOutput: tc.expectedOutput,
-            actualOutput: data.success ? data.output : `Error: ${data.output}`,
-            executionTime: data.executionTime ? parseInt(data.executionTime) : 0,
-            error: data.success ? '' : data.output,
-          });
-        } catch (err) {
-          cppResults.push({ passed: false, input: tc.input, expectedOutput: tc.expectedOutput, actualOutput: `Error: ${err.message}`, executionTime: 0, error: err.message });
-        }
-      }
-      setRunResults(cppResults);
-      setRunning(false);
-      return;
-    } else {
-      results = await aiRun(language, code, question?.problemStatement || '', visibleCases);
     }
     setRunResults(results);
     setRunning(false);
@@ -328,62 +270,15 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
     setRunning(true);
     const allCases = (question?.testCases?.length ? question.testCases : derivedTestCases);
     if (!allCases.length) {
-      setSubmitResults({ language, code, testResults: [{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available for this problem.', executionTime: 0, error: 'No test cases' }], passedCount: 0, totalTests: 0, score: 0, status: 'runtime_error' });
+      const errResult = { language, code, testResults: [{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available for this problem.', executionTime: 0, error: 'No test cases' }], passedCount: 0, totalTests: 0, score: 0, status: 'runtime_error' };
+      setSubmitResults(errResult);
       setSubmitted(true);
       setActiveTab('results');
       setRunning(false);
-      onSubmit && onSubmit({ language, code, testResults: [{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available.', executionTime: 0, error: 'No test cases' }], passedCount: 0, totalTests: 0, score: 0, status: 'runtime_error' });
+      onSubmit && onSubmit(errResult);
       return;
     }
-    const cases = allCases;
-    let results;
-    if (language === 'javascript') {
-      results = cases.map(tc => {
-        const r = runJavaScript(code, tc.input);
-        const expOut = (tc.expectedOutput || '').trim();
-        return {
-          passed: !r.error && (!expOut || r.output.trim() === expOut),
-          input: tc.input,
-          expectedOutput: tc.expectedOutput,
-          actualOutput: r.error ? `Error: ${r.error}` : r.output,
-          executionTime: Math.floor(Math.random() * 60) + 5,
-          error: r.error || '',
-        };
-      });
-    } else if (language === 'cpp') {
-      const cppResults = [];
-      for (const tc of cases) {
-        try {
-          const res = await fetch(`${API_BASE}/api/compile`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code, input: tc.input })
-          });
-          const data = await res.json();
-          const expOut = (tc.expectedOutput || '').trim();
-          cppResults.push({
-            passed: data.success && (!expOut || data.output.trim() === expOut),
-            input: tc.input,
-            expectedOutput: tc.expectedOutput,
-            actualOutput: data.success ? data.output : `Error: ${data.output}`,
-            executionTime: data.executionTime ? parseInt(data.executionTime) : 0,
-            error: data.success ? '' : data.output,
-          });
-        } catch (err) {
-          cppResults.push({ passed: false, input: tc.input, expectedOutput: tc.expectedOutput, actualOutput: `Error: ${err.message}`, executionTime: 0, error: err.message });
-        }
-      }
-      results = cppResults;
-    } else {
-      results = await aiRun(language, code, question?.problemStatement || '', cases);
-    }
-    const passedCount = results.filter(r => r.passed).length;
-    const totalTests  = results.length;
-    const score = Math.round((passedCount / totalTests) * 100);
-    const status = passedCount === totalTests ? 'accepted'
-      : results.some(r => r.error) ? 'runtime_error' : 'wrong_answer';
-
-    const result = { language, code, testResults: results, passedCount, totalTests, score, status };
+    const result = await judgeSubmit(language, code, allCases, question?.id);
     setSubmitResults(result);
     setSubmitted(true);
     setActiveTab('results');
