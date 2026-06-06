@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { API_BASE } from '../config/api.js';
 import { analyzeCode, isAiOnline } from '../services/aiService';
+import { getStub } from '../utils/stubs';
 
 // ── Icons ─────────────────────────────────────────────────────
 const PlayIcon = () => (
@@ -40,60 +41,6 @@ const DEFAULT_STARTERS = {
   python:     'class Solution:\n    def solve(self, input_data):\n        pass',
   cpp:        `class Solution {\npublic:\n    void solve() {\n        \n    }\n};`,
   java:       'class Solution {\n    public void solve() {\n        \n    }\n}',
-};
-
-const LEETCODE_STUBS = {
-  cpp: `/**
- * Definition for singly-linked list.
- * struct ListNode {
- *     int val;
- *     ListNode *next;
- *     ListNode() : val(0), next(nullptr) {}
- *     ListNode(int x) : val(x), next(nullptr) {}
- *     ListNode(int x, ListNode *next) : val(x), next(next) {}
- * };
- */
-class Solution {
-public:
-    ListNode* swapPairs(ListNode* head) {
-        
-    }
-};`,
-  java: `/**
- * Definition for singly-linked list.
- * public class ListNode {
- *     int val;
- *     ListNode next;
- *     ListNode() {}
- *     ListNode(int val) { this.val = val; }
- *     ListNode(int val, ListNode next) { this.val = val; this.next = next; }
- * }
- */
-class Solution {
-    public ListNode swapPairs(ListNode head) {
-        
-    }
-}`,
-  python: `# Definition for singly-linked list.
-# class ListNode:
-#     def __init__(self, val=0, next=None):
-#         self.val = val
-#         self.next = next
-class Solution:
-    def swapPairs(self, head: Optional[ListNode]) -> Optional[ListNode]:
-        
-`,
-  javascript: `/**
- * Definition for singly-linked list.
- * function ListNode(val, next) {
- *     this.val = (val===undefined ? 0 : val)
- *     this.next = (next===undefined ? null : next)
- * }
- */
-var swapPairs = function(head) {
-    
-};
-`,
 };
 
 // ── Judge pipeline helper ─────────────────────────────────────
@@ -154,8 +101,8 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   useEffect(() => {
     if (!readOnly && !submitted) {
       defaultCodeRef.current = false;
-      const stub = LEETCODE_STUBS[language] || DEFAULT_STARTERS[language];
-      setCode(stub);
+      const slug = question?.titleSlug || question?.slug || '';
+      setCode(getStub(language, slug) || DEFAULT_STARTERS[language]);
       defaultCodeRef.current = true;
       setRunResults(null);
       setSubmitResults(null);
@@ -243,7 +190,8 @@ const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', 
   const switchLanguage = (lang) => {
     if (submitted) return;
     setLanguage(lang);
-    setCode(LEETCODE_STUBS[lang] || question?.starterCode?.[lang] || DEFAULT_STARTERS[lang]);
+    const slug = question?.titleSlug || question?.slug || '';
+    setCode(getStub(lang, slug) || question?.starterCode?.[lang] || DEFAULT_STARTERS[lang]);
     setRunResults(null);
   };
 
