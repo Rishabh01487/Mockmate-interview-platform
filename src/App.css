@@ -3,6 +3,39 @@
    ============================================ */
 
 :root {
+  /* Light mode overrides (applied via .light-mode on <html>) */
+}
+html.light-mode {
+  --bg-primary: #f0f6ff;
+  --bg-secondary: #e8eff9;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f5f8fe;
+  --bg-elevated: #dbeafe;
+  --bg-input: #ffffff;
+
+  --border-primary: #b8d4fe;
+  --border-subtle: #cfe2ff;
+  --border-hover: #7a9fc8;
+  --border-active: #1a4d8f;
+
+  --text-primary: #0f2b4f;
+  --text-secondary: #3a6090;
+  --text-muted: #6a8fb8;
+  --text-inverse: #ffffff;
+
+  --accent: #1a4d8f;
+  --accent-subtle: rgba(26,77,143,0.08);
+  --accent-hover: rgba(26,77,143,0.15);
+  --accent-muted: rgba(26,77,143,0.04);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 20px rgba(77,143,255,0.12);
+}
+
+:root {
   /* Core Palette */
   --bg-primary: #0a0a0a;
   --bg-secondary: #111111;
