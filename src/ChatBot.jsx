@@ -68,6 +68,7 @@ export default function ChatBot() {
   const [typing, setTyping] = useState(false);
   const [unread, setUnread] = useState(0);
   const [aiStatus, setAiStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
+  const [vergeLight, setVergeLight] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -178,7 +179,7 @@ export default function ChatBot() {
 
       {/* Chat Window */}
       {open && (
-        <div className="cb-window" role="dialog" aria-label="Verge1.o AI Assistant">
+        <div className={`cb-window${vergeLight ? ' cb-window--light' : ''}`} role="dialog" aria-label="Verge1.o AI Assistant">
           {/* Header */}
           <div className="cb-header">
             <div className="cb-header-info">
@@ -195,11 +196,16 @@ export default function ChatBot() {
                 </div>
               </div>
             </div>
-            <button className="cb-close" id="chatbot-close" onClick={() => setOpen(false)} aria-label="Close chat">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+            <div className="cb-header-actions">
+              <button className="cb-light-toggle" onClick={() => setVergeLight(v => !v)} title="Toggle light mode" aria-label="Toggle light mode">
+                {vergeLight ? '🌙' : '☀️'}
+              </button>
+              <button className="cb-close" id="chatbot-close" onClick={() => setOpen(false)} aria-label="Close chat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
