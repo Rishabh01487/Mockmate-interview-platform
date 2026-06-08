@@ -731,6 +731,59 @@ app.post('/api/compile', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+//  Judge Pipeline — LeetCode-grade verdicts (AC / WA / CE / RE / TLE)
+// ════════════════════════════════════════════════════════════
+const judge = require('./judge');
+
+let testSuites = {};
+
+app.post('/api/judge/run', async (req, res) => {
+  try {
+    const { language, code, input, expectedOutput } = req.body;
+    if (!code) return res.status(400).json({ error: 'No code provided' });
+
+    const testCases = [{ input: input || '', expectedOutput: expectedOutput || '' }];
+    const results = await judge.runTests(language, code, testCases);
+    res.json(results[0]);
+  } catch (err) {
+    res.json({ status: 'runtime_error', error: err.message, passed: false });
+  }
+});
+
+app.post('/api/judge/submit', async (req, res) => {
+  try {
+    const { language, code, questionId } = req.body;
+    if (!code) return res.status(400).json({ error: 'No code provided' });
+
+    let testCases;
+    if (questionId && testSuites[questionId]) {
+      testCases = testSuites[questionId];
+    } else {
+      testCases = req.body.testCases || [];
+    }
+
+    if (!testCases.length) return res.status(400).json({ error: 'No test cases provided' });
+
+    const result = await judge.submitTests(language, code, testCases);
+    res.json(result);
+  } catch (err) {
+    res.json({ status: 'runtime_error', error: err.message, passedCount: 0, totalTests: 0, score: 0, testResults: [] });
+  }
+});
+
+app.post('/api/judge/test-suites', (req, res) => {
+  const { questionId, testCases } = req.body;
+  if (!questionId || !testCases) return res.status(400).json({ error: 'questionId and testCases required' });
+  testSuites[questionId] = testCases;
+  res.json({ ok: true, count: testCases.length });
+});
+
+app.get('/api/judge/test-suites/:questionId', (req, res) => {
+  const cases = testSuites[req.params.questionId] || [];
+  res.json(cases);
+});
+
+// ════════════════════════════════════════════════════════════
 //  LeetCode Live API Proxy
 // ════════════════════════════════════════════════════════════
 app.get('/api/leetcode/snippet/:titleSlug', async (req, res) => {
