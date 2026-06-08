@@ -44,6 +44,11 @@ function AppInner() {
   const { isLoggedIn, ready, user, logout } = useAuth();
   const [page, setPage]               = useState('home');
   const [reportSession, setReportSession] = useState(null);
+  const [lightMode, setLightMode]     = useState(false);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light-mode', lightMode);
+  }, [lightMode]);
 
   const goHome   = () => setPage('home');
   const goReport = (session) => { setReportSession(session); setPage('report'); };
@@ -69,6 +74,12 @@ function AppInner() {
           borderBottom: '1px solid rgba(255,255,255,0.06)',
           gap: '0.75rem',
         }}>
+          <button onClick={() => setLightMode(v => !v)} style={{
+            background: 'none', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6,
+            padding: '0.28rem 0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: '#a5b4fc',
+          }} title="Toggle light/dark mode">
+            {lightMode ? '🌙' : '☀️'}
+          </button>
           <span style={{ color: '#6b7280', fontSize: '0.78rem' }}>
             {user ? `👤 ${user?.name || user?.email}` : ''}
           </span>
