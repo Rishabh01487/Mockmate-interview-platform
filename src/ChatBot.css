@@ -299,3 +299,109 @@
 }
 .cb-send:hover:not(:disabled) { opacity: 0.85; }
 .cb-send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── Header Actions ── */
+.cb-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cb-light-toggle {
+  background: none;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+  line-height: 1;
+}
+.cb-light-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+/* ── Verge1.o Light Mode (blue + white) ── */
+.cb-window--light {
+  background: #f0f6ff;
+  border-color: #b8d4fe;
+}
+.cb-window--light .cb-header {
+  background: #dbeafe;
+  border-bottom-color: #b8d4fe;
+}
+.cb-window--light .cb-header-name {
+  color: #1a4d8f;
+}
+.cb-window--light .cb-header-status {
+  color: #4a7db5;
+}
+.cb-window--light .cb-avatar {
+  background: #1a4d8f;
+  color: #fff;
+}
+.cb-window--light .cb-close {
+  border-color: #b8d4fe;
+  color: #4a7db5;
+}
+.cb-window--light .cb-close:hover {
+  color: #1a4d8f;
+  border-color: #1a4d8f;
+}
+.cb-window--light .cb-light-toggle {
+  border-color: #b8d4fe;
+  color: #4a7db5;
+}
+.cb-window--light .cb-light-toggle:hover {
+  color: #1a4d8f;
+  border-color: #1a4d8f;
+}
+.cb-window--light .cb-msg--bot .cb-msg-bubble {
+  background: #dbeafe;
+  border-color: #b8d4fe;
+}
+.cb-window--light .cb-msg--bot .cb-msg-text {
+  color: #1a3a5c;
+}
+.cb-window--light .cb-msg--user .cb-msg-bubble {
+  background: #1a4d8f;
+  color: #fff;
+}
+.cb-window--light .cb-msg-avatar {
+  background: #dbeafe;
+  border-color: #b8d4fe;
+  color: #1a4d8f;
+}
+.cb-window--light .cb-typing span {
+  background: #1a4d8f;
+}
+.cb-window--light .cb-suggestion {
+  border-color: #b8d4fe;
+  color: #4a7db5;
+}
+.cb-window--light .cb-suggestion:hover {
+  border-color: #1a4d8f;
+  color: #1a4d8f;
+  background: rgba(26,77,143,0.08);
+}
+.cb-window--light .cb-input-area {
+  border-top-color: #b8d4fe;
+  background: #f0f6ff;
+}
+.cb-window--light .cb-input {
+  background: #fff;
+  border-color: #b8d4fe;
+  color: #1a3a5c;
+}
+.cb-window--light .cb-input:focus {
+  border-color: #1a4d8f;
+}
+.cb-window--light .cb-input::placeholder {
+  color: #7a9fc8;
+}
+.cb-window--light .cb-send {
+  background: #1a4d8f;
+  color: #fff;
+}
