@@ -1,47 +1,42 @@
-const WANDBOX_URL = 'https://wandbox.org/api/compile.json';
-
-function stripANSI(s = '') {
-  return String(s)
-    .replace(/\u001b\[.*?m/g, '')
-    .replace(/\u001b\[.*?[A-Za-z]/g, '');
-}
+const JDDOODLE_URL = 'https://api.jdoodle.com/v1/execute';
 
 module.exports = {
   async run(code, input) {
+    // Optional: Add wrapper for LeetCode's "Solution" class
+    const wrappedCode = code.includes('class Solution') 
+      ? `${code}\n\npublic class Main {
+          public static void main(String[] args) {
+            Solution sol = new Solution();
+            // Parse input and call appropriate method (customize as needed)
+            // Example: System.out.println(sol.twoSum(parseInput(args[0])));
+          }
+        }`
+      : code;
+
     const body = {
-      code,
-      compiler: 'openjdk21',   // ✅ fixed – use a valid Wandbox Java compiler
+      script: wrappedCode,
       stdin: input || '',
-      save: false,
+      language: 'java',
+      versionIndex: '4', // Java 17
+      clientId: process.env.JDDOODLE_CLIENT_ID,
+      clientSecret: process.env.JDDOODLE_CLIENT_SECRET,
     };
 
-    const response = await fetch(WANDBOX_URL, {
+    const response = await fetch(JDDOODLE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
-    const text = await response.text();
+    const result = await response.json();
 
-    let result;
-    try {
-      result = JSON.parse(text);
-    } catch {
-      // Better error message including HTTP status and raw response snippet
-      throw new Error(`Wandbox error (HTTP ${response.status}): ${text.slice(0, 200)}`);
-    }
-
-    if (result.compiler_error) {
-      throw new Error('compile_error: ' + stripANSI(result.compiler_error));
-    }
-
-    if (result.status !== '0') {
-      throw new Error(stripANSI(result.program_message || result.program_error || 'runtime_error'));
+    if (result.error) {
+      throw new Error(result.error);
     }
 
     return {
-      output: stripANSI(result.program_output || '').trim(),
-      error: null,
+      output: result.output.trim(),
+      error: result.memory || null,
     };
   },
 };
