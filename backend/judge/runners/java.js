@@ -1,11 +1,13 @@
 const WANDBOX_URL = 'https://wandbox.org/api/compile.json';
 
-function stripANSI(s) {
-  return s.replace(/\u001b\[.*?m/g, '').replace(/\u001b\[.*?[A-Za-z]/g, '');
+function stripANSI(s = '') {
+  return String(s)
+    .replace(/\u001b\[.*?m/g, '')
+    .replace(/\u001b\[.*?[A-Za-z]/g, '');
 }
 
 module.exports = {
-  async run(code, input, options = {}) {
+  async run(code, input) {
     const body = {
       code,
       compiler: 'openjdk-jdk21',
@@ -13,19 +15,32 @@ module.exports = {
       save: false,
     };
 
-    const wandbox = await fetch(WANDBOX_URL, {
+    const response = await fetch(WANDBOX_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const result = await wandbox.json();
+
+    const text = await response.text();
+
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      throw new Error('Wandbox error: ' + text.slice(0, 200));
+    }
 
     if (result.compiler_error) {
       throw new Error('compile_error: ' + stripANSI(result.compiler_error));
     }
+
+    if (result.status !== '0') {
+      throw new Error(stripANSI(result.program_message || result.program_error || 'runtime_error'));
+    }
+
     return {
-      output: stripANSI(result.program_output || result.program_message || '(no output)'),
-      error: result.status !== '0' ? result.program_message : null,
+      output: stripANSI(result.program_output || '').trim(),
+      error: null,
     };
   },
 };
