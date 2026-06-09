@@ -10,7 +10,7 @@ module.exports = {
   async run(code, input) {
     const body = {
       code,
-      compiler: 'openjdk-head',
+      compiler: 'openjdk21',   // ✅ fixed – use a valid Wandbox Java compiler
       stdin: input || '',
       save: false,
     };
@@ -27,7 +27,8 @@ module.exports = {
     try {
       result = JSON.parse(text);
     } catch {
-      throw new Error('Wandbox error: ' + text.slice(0, 200));
+      // Better error message including HTTP status and raw response snippet
+      throw new Error(`Wandbox error (HTTP ${response.status}): ${text.slice(0, 200)}`);
     }
 
     if (result.compiler_error) {
