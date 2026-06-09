@@ -10,7 +10,7 @@ module.exports = {
   async run(code, input) {
     const body = {
       code,
-      compiler: 'openjdk-jdk21',
+      compiler: 'openjdk-head',
       stdin: input || '',
       save: false,
     };
