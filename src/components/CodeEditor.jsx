@@ -1,521 +1,256 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import Editor from '@monaco-editor/react';
-import { API_BASE } from '../config/api.js';
-import { analyzeCode, isAiOnline } from '../services/aiService';
-import { getStub } from '../utils/stubs';
+import React, { useState, useEffect, useRef } from 'react';
 
-// ── Icons ─────────────────────────────────────────────────────
-const PlayIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-);
-const SendIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-  </svg>
-);
-const ResetIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/>
-  </svg>
-);
-const CheckIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12"/>
-  </svg>
-);
-const AIIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-  </svg>
-);
+const Editor = () => {
+  const [logs, setLogs] = useState([]);
+  const consoleRef = useRef(null);
+  const inputRef = useRef(null);
 
-const LANGUAGES = [
-  { id: 'javascript', label: 'JavaScript', ext: 'js' },
-  { id: 'python',     label: 'Python',     ext: 'py' },
-  { id: 'cpp',        label: 'C++',         ext: 'cpp' },
-  { id: 'java',       label: 'Java',        ext: 'java' },
-];
+  // --- 1. Styles (LeetCode Aesthetic) ---
+  const css = `
+    :root {
+      --leetcode-bg: #1e1e1e;
+      --leetcode-panel: #252526;
+      --leetcode-border: #3e3e42;
+      --leetcode-text: #d4d4d4;
+      --leetcode-accent: #007acc;
+      --leetcode-success: #4caf50;
+      --leetcode-error: #f44336;
+      --keyword: #569cd6;
+      --string: #ce9178;
+      --number: #b5cea8;
+      --comment: #6a9955;
+      --function: #dcdcaa;
+    }
 
-const DEFAULT_STARTERS = {
-  javascript: '/**\n * @param {...}\n * @return {...}\n */\nvar solution = function(input) {\n    \n};\n\nvar result = solution(input);\nconsole.log(JSON.stringify(result));',
-  python:     'class Solution:\n    def solve(self, input_data):\n        pass',
-  cpp:        `class Solution {\npublic:\n    void solve() {\n        \n    }\n};`,
-  java:       'class Solution {\n    public void solve() {\n        \n    }\n}',
-};
+    .editor-wrapper { 
+      height: 100%; 
+      background-color: var(--leetcode-bg); 
+      color: var(--leetcode-text); 
+      font-family: 'Consolas', 'Monaco', monospace; 
+      font-size: 14px; 
+      display: flex; 
+      flex-direction: column; 
+    }
 
-// ── Judge pipeline helper ─────────────────────────────────────
-async function judgeRun(language, code, testCases) {
-  try {
-    const res = await fetch(`${API_BASE}/api/judge/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ language, code, input: testCases.input, expectedOutput: testCases.expectedOutput })
+    .code-area { 
+      flex: 1; 
+      position: relative; 
+      display: flex; 
+      overflow: hidden; 
+    }
+
+    .line-numbers { 
+      width: 50px; 
+      background-color: var(--leetcode-panel); 
+      color: #858585; 
+      text-align: right; 
+      padding: 10px 5px; 
+      border-right: 1px solid var(--leetcode-border); 
+      user-select: none; 
+      line-height: 1.5; 
+    }
+
+    .highlight-overlay { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      padding: 10px; 
+      margin: 0; 
+      white-space: pre; 
+      color: transparent; 
+      pointer-events: none; 
+      z-index: 2; 
+      width: 100%; 
+      height: 100%; 
+      overflow: auto; 
+    }
+
+    .code-input { 
+      position: absolute; 
+      top: 0; 
+      left: 0; 
+      width: 100%; 
+      height: 100%; 
+      padding: 10px; 
+      margin: 0; 
+      border: none; 
+      background: transparent; 
+      color: var(--leetcode-text); 
+      resize: none; 
+      outline: none; 
+      z-index: 1; 
+      white-space: pre; 
+      overflow: auto; 
+      tab-size: 4; 
+    }
+
+    /* Syntax Colors */
+    .token-keyword { color: var(--keyword); font-weight: bold; }
+    .token-string { color: var(--string); }
+    .token-number { color: var(--number); }
+    .token-comment { color: var(--comment); font-style: italic; }
+    .token-function { color: var(--function); }
+  `;
+
+  // --- 2. Syntax Highlighting Logic ---
+  const highlightCode = (code) => {
+    if (!code) return '';
+    let html = code
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Comments
+    html = html.replace(/(\/\/.*)/g, '<span class="token-comment">$1</span>');
+    html = html.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="token-comment">$1</span>');
+
+    // Strings
+    html = html.replace(/(&quot;.*?&quot;|&#x27;.*?&#x27;)/g, '<span class="token-string">$1</span>');
+
+    // Numbers
+    html = html.replace(/\b(\d+)\b/g, '<span class="token-number">$1</span>');
+
+    // Keywords
+    const keywords = ['var', 'let', 'const', 'function', 'return', 'if', 'else', 'for', 'while', 'new', 'this', 'class', 'extends', 'import', 'export', 'from', 'try', 'catch', 'throw', 'break', 'continue'];
+    keywords.forEach(kw => {
+      const regex = new RegExp(`\\b(${kw})\\b`, 'g');
+      html = html.replace(regex, '<span class="token-keyword">$1</span>');
     });
-    return await res.json();
-  } catch (err) {
-    return { passed: false, status: 'runtime_error', error: err.message, actualOutput: `Error: ${err.message}` };
-  }
-}
 
-async function judgeSubmit(language, code, testCases, questionId) {
-  try {
-    const res = await fetch(`${API_BASE}/api/judge/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ language, code, testCases, questionId })
-    });
-    return await res.json();
-  } catch (err) {
-    return { testResults: testCases.map(() => ({ passed: false, status: 'runtime_error', error: err.message })), passedCount: 0, totalTests: testCases.length, score: 0, status: 'runtime_error' };
-  }
-}
+    // Functions
+    html = html.replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, '<span class="token-function">$1</span>(');
 
-/**
- * CodeEditor
- * Props:
- *   question — { text, problemStatement, constraints, examples, testCases, starterCode, expectedTimeComplexity }
- *   onSubmit(result) — called with { language, code, testResults, passedCount, totalTests, score, status }
- *   readOnly — show submitted code, no editing
- *   submittedCode, submittedLanguage — for review mode
- */
-const CodeEditor = ({ question, onSubmit, readOnly = false, submittedCode = '', submittedLanguage = 'javascript' }) => {
-  const [language, setLanguage] = useState(submittedLanguage);
-  const [code, setCode] = useState(
-    submittedCode ||
-    question?.starterCode?.[submittedLanguage] ||
-    DEFAULT_STARTERS[submittedLanguage]
-  );
-  const [running, setRunning] = useState(false);
-  const [submitted, setSubmitted] = useState(readOnly);
-  const [runResults, setRunResults] = useState(null);
-  const [submitResults, setSubmitResults] = useState(null);
-  const [activeTab, setActiveTab] = useState('problem'); // 'problem' | 'testcases' | 'results'
-  const [aiAnalysis, setAiAnalysis] = useState(null); // AI debug result
-  const [aiLoading, setAiLoading] = useState(false);
-  const [derivedTestCases, setDerivedTestCases] = useState([]);
-  const [fetchedDescription, setFetchedDescription] = useState('');
-  const [vergeLight, setVergeLight] = useState(false);
-  const defaultCodeRef = useRef(false);
-
-  // Set LeetCode skeleton once per problem
-  useEffect(() => {
-    if (!readOnly && !submitted) {
-      defaultCodeRef.current = false;
-      const slug = question?.titleSlug || question?.slug || '';
-      setCode(getStub(language, slug) || DEFAULT_STARTERS[language]);
-      defaultCodeRef.current = true;
-      setRunResults(null);
-      setSubmitResults(null);
-      setActiveTab('problem');
-    }
-  }, [question?.id, question?.titleSlug]);
-
-  // Fetch LeetCode example test cases when no explicit test cases exist
-  useEffect(() => {
-    if (!readOnly && !submitted && question?.titleSlug && (!question?.testCases || question.testCases.length === 0)) {
-      const query = `query questionData($titleSlug: String!) { question(titleSlug: $titleSlug) { exampleTestcases } }`;
-      fetch(`${API_BASE}/api/leetcode-graphql`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
-      })
-        .then(res => res.json())
-        .then(data => {
-          const exampleStr = data?.data?.question?.exampleTestcases;
-          if (exampleStr) {
-            const lines = exampleStr.split('\n').filter(l => l.trim());
-            if (lines.length > 0) {
-              const groupSize = lines.length % 2 === 0 ? 2 : 1;
-              const cases = [];
-              for (let i = 0; i < lines.length; i += groupSize) {
-                cases.push({ input: lines.slice(i, i + groupSize).join('\n'), expectedOutput: '', isHidden: false });
-              }
-              setDerivedTestCases(cases);
-            }
-          }
-        })
-        .catch(() => {});
-    }
-  }, [question?.id, question?.titleSlug]);
-
-  // Register test suites with judge backend
-  useEffect(() => {
-    const allCases = (question?.testCases?.length ? question.testCases : derivedTestCases);
-    if (allCases.length > 0 && question?.id) {
-      fetch(`${API_BASE}/api/judge/test-suites`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionId: question.id, testCases: allCases })
-      }).catch(() => {});
-    }
-  }, [question?.id, question?.testCases, derivedTestCases]);
-
-  // Fetch full LeetCode question description
-  useEffect(() => {
-    if (!readOnly && !submitted && question?.titleSlug && !fetchedDescription) {
-      const query = `query questionContent($titleSlug: String!) { question(titleSlug: $titleSlug) { content } }`;
-      fetch(`${API_BASE}/api/leetcode-graphql`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, variables: { titleSlug: question.titleSlug } })
-      })
-        .then(res => res.json())
-        .then(data => {
-          const html = data?.data?.question?.content || '';
-          if (html) {
-            const md = html
-              .replace(/<pre>\s*<code>/g, '```\n')
-              .replace(/<\/code>\s*<\/pre>/g, '\n```')
-              .replace(/<code>(.*?)<\/code>/g, '`$1`')
-              .replace(/<strong>(.*?)<\/strong>/g, '**$1**')
-              .replace(/<em>(.*?)<\/em>/g, '*$1*')
-              .replace(/<p>/g, '\n\n').replace(/<\/p>/g, '')
-              .replace(/<br\s*\/?>/g, '\n')
-              .replace(/<li>/g, '• ').replace(/<\/li>/g, '')
-              .replace(/<ul>/g, '').replace(/<\/ul>/g, '')
-              .replace(/<ol>/g, '').replace(/<\/ol>/g, '')
-              .replace(/<h3>(.*?)<\/h3>/g, '**$1**')
-              .replace(/<h[1-6]>.*?<\/h[1-6]>/g, '')
-              .replace(/&nbsp;/g, ' ')
-              .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
-              .replace(/\n{3,}/g, '\n\n').trim();
-            setFetchedDescription(md);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [question?.id, question?.titleSlug]);
-
-  // Switch language → load starter code
-  const switchLanguage = (lang) => {
-    if (submitted) return;
-    setLanguage(lang);
-    const slug = question?.titleSlug || question?.slug || '';
-    setCode(getStub(lang, slug) || question?.starterCode?.[lang] || DEFAULT_STARTERS[lang]);
-    setRunResults(null);
+    return html;
   };
 
-  // AI Debug — full intelligent code review
-  const handleAIDebug = useCallback(async () => {
-    setAiLoading(true);
-    setAiAnalysis(null);
-    setActiveTab('results');
-    try {
-      const problemText = question?.problemStatement || question?.question || question?.text || 'Solve the given problem';
-      const testCasesForAI = (question?.testCases?.length ? question.testCases : derivedTestCases).slice(0, 3);
-      // If no test cases, create a placeholder so AI still reviews the code
-      if (testCasesForAI.length === 0 && question?.examples?.length > 0) {
-        question.examples.slice(0, 2).forEach(ex => {
-          testCasesForAI.push({ input: ex.input || '', expectedOutput: ex.output || ex.expectedOutput || '' });
-        });
+  // --- 3. Effects & Listeners ---
+  useEffect(() => {
+    const input = inputRef.current;
+    const highlight = input.nextElementSibling;
+    const lineNumbers = input.parentElement.previousElementSibling;
+
+    if (!input || !highlight) return;
+
+    const updateHighlight = () => {
+      highlight.innerHTML = highlightCode(input.value);
+      const lines = input.value.split('\n').length;
+      lineNumbers.innerHTML = Array(lines).fill(0).map((_, i) => i + 1).join('<br>');
+    };
+
+    const handleScroll = () => {
+      highlight.scrollTop = input.scrollTop;
+      highlight.scrollLeft = input.scrollLeft;
+      lineNumbers.scrollTop = input.scrollTop;
+    };
+
+    // Tab Key Support
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        input.value = input.value.substring(0, start) + "\t" + input.value.substring(end);
+        input.selectionStart = input.selectionEnd = start + 1;
+        updateHighlight();
       }
-      const analysis = await analyzeCode(code, language, problemText, testCasesForAI);
-      setAiAnalysis(analysis);
-    } catch (err) {
-      setAiAnalysis({ error: err.message, compiles: false, bugs: ['Failed to connect to AI engine — make sure backend is running on port 5000'], suggestions: [], overallVerdict: 'error', score: 0 });
-    }
-    setAiLoading(false);
-  }, [code, language, question, derivedTestCases]);
+    });
 
-  // Run against visible test cases only
-  const handleRun = useCallback(async () => {
-    setRunning(true);
-    setActiveTab('results');
-    const allTestCases = (question?.testCases?.length ? question.testCases : derivedTestCases);
-    const visibleCases = allTestCases.filter(tc => !tc.isHidden).slice(0, 3);
-    if (!visibleCases.length) {
-      setRunResults([{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available for this problem.', executionTime: 0, error: 'No test cases' }]);
-      setRunning(false);
-      return;
-    }
-    const results = [];
-    for (const tc of visibleCases) {
-      const r = await judgeRun(language, code, tc);
-      results.push({
-        passed: r.passed,
-        status: r.status,
-        input: tc.input,
-        expectedOutput: tc.expectedOutput,
-        actualOutput: r.actualOutput || r.error || '(no output)',
-        executionTime: r.executionTime || 0,
-        error: r.error || '',
+    input.addEventListener('input', updateHighlight);
+    input.addEventListener('scroll', handleScroll);
+    updateHighlight();
+
+    return () => {
+      input.removeEventListener('input', updateHighlight);
+      input.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // --- 4. Runner Logic (Simulated Debug) ---
+  const runCode = () => {
+    if (!consoleRef.current) return;
+    consoleRef.current.innerHTML = '';
+    setLogs([]);
+
+    const code = inputRef.current.value;
+    const originalLog = console.log;
+    const logs = [];
+    
+    // Intercept console.log from the user code
+    console.log = (...args) => {
+      logs.push({ type: 'info', msg: args.join(' ') });
+      originalLog.apply(console, args);
+    };
+
+    try {
+      // Execute User Code safely
+      new Function(code)();
+      console.log = originalLog;
+
+      logs.forEach(log => {
+        const div = document.createElement('div');
+        div.className = `log-entry log-${log.type}`;
+        div.textContent = log.msg;
+        consoleRef.current.appendChild(div);
       });
-    }
-    setRunResults(results);
-    setRunning(false);
-  }, [code, language, question, derivedTestCases]);
 
-  // Submit — runs against ALL test cases
-  const handleSubmit = useCallback(async () => {
-    setRunning(true);
-    const allCases = (question?.testCases?.length ? question.testCases : derivedTestCases);
-    if (!allCases.length) {
-      const errResult = { language, code, testResults: [{ passed: false, input: '', expectedOutput: '', actualOutput: 'No test cases available for this problem.', executionTime: 0, error: 'No test cases' }], passedCount: 0, totalTests: 0, score: 0, status: 'runtime_error' };
-      setSubmitResults(errResult);
-      setSubmitted(true);
-      setActiveTab('results');
-      setRunning(false);
-      onSubmit && onSubmit(errResult);
-      return;
-    }
-    const result = await judgeSubmit(language, code, allCases, question?.id);
-    setSubmitResults(result);
-    setSubmitted(true);
-    setActiveTab('results');
-    setRunning(false);
-    onSubmit && onSubmit(result);
-  }, [code, language, question, derivedTestCases, onSubmit]);
+      if (logs.length === 0) {
+         const div = document.createElement('div');
+         div.className = "log-entry log-info";
+         div.textContent = "Program executed with no output.";
+         consoleRef.current.appendChild(div);
+      }
 
-  const testCases = (question?.testCases?.length ? question.testCases : derivedTestCases).filter(tc => !tc.isHidden);
-  const examples  = question?.examples || [];
+    } catch (err) {
+      console.log = originalLog;
+      const div = document.createElement('div');
+      div.className = 'log-entry log-error';
+      div.textContent = `Error: ${err.message}`;
+      consoleRef.current.appendChild(div);
+    }
+  };
 
   return (
-    <div className="ce-root">
-      {/* ── Left: Problem Panel ── */}
-      <div className="ce-left">
-        <div className="ce-panel-tabs">
-          {['problem', 'testcases', 'results'].map(tab => (
-            <button key={tab} className={`ce-panel-tab${activeTab === tab ? ' ce-panel-tab--active' : ''}`}
-              onClick={() => setActiveTab(tab)}>
-              {tab === 'problem' ? 'Problem' : tab === 'testcases' ? 'Test Cases' : 'Results'}
-              {tab === 'results' && submitResults && (
-                <span className={`ce-result-badge ${submitResults.status === 'accepted' ? 'ce-badge--pass' : 'ce-badge--fail'}`}>
-                  {submitResults.passedCount}/{submitResults.totalTests}
-                </span>
-              )}
-            </button>
-          ))}
+    <>
+      <style>{css}</style>
+      
+      <div className="editor-wrapper">
+        {/* --- Editor --- */}
+        <div className="code-area">
+          <div className="line-numbers" id="line-numbers">1</div>
+          <pre className="highlight-overlay" id="code-highlight"></pre>
+          <textarea 
+            ref={inputRef}
+            className="code-input" 
+            defaultValue={`var twoSum = function(nums, target) {
+    // Write your solution here
+    const map = new Map();
+    for (let i = 0; i < nums.length; i++) {
+        const complement = target - nums[i];
+        if (map.has(complement)) {
+            return [map.get(complement), i];
+        }
+        map.set(nums[i], i);
+    }
+    return [];
+};`}
+          ></textarea>
         </div>
 
-        <div className="ce-panel-body">
-          {activeTab === 'problem' && (
-            <div className="ce-problem">
-              <h3 className="ce-problem-title">{question?.text || 'Coding Problem'}</h3>
-              {question?.difficulty && (
-                <span className={`ip-diff-badge ip-diff-badge--${question.difficulty}`}>{question.difficulty}</span>
-              )}
-              <div className="ce-problem-statement">
-                {fetchedDescription || question?.problemStatement || question?.text}
-              </div>
-              {question?.constraints?.length > 0 && (
-                <div className="ce-section">
-                  <div className="ce-section-label">Constraints</div>
-                  <ul className="ce-constraints">
-                    {question.constraints.map((c, i) => <li key={i}><code>{c}</code></li>)}
-                  </ul>
-                </div>
-              )}
-              {examples.length > 0 && (
-                <div className="ce-section">
-                  <div className="ce-section-label">Examples</div>
-                  {examples.map((ex, i) => (
-                    <div className="ce-example" key={i}>
-                      <div className="ce-example-row"><span>Input:</span><code>{ex.input}</code></div>
-                      <div className="ce-example-row"><span>Output:</span><code>{ex.output}</code></div>
-                      {ex.explanation && <div className="ce-example-explanation">{ex.explanation}</div>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {question?.expectedTimeComplexity && (
-                <div className="ce-complexity">
-                  Expected: <code>{question.expectedTimeComplexity}</code>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'testcases' && (
-            <div className="ce-testcases">
-              {testCases.length === 0 ? (
-                <p className="ce-empty">No visible test cases for this problem.</p>
-              ) : testCases.map((tc, i) => (
-                <div className="ce-tc-item" key={i}>
-                  <div className="ce-tc-label">Case {i + 1}</div>
-                  <div className="ce-tc-row"><span>Input:</span><code>{tc.input}</code></div>
-                  <div className="ce-tc-row"><span>Expected:</span><code>{tc.expectedOutput}</code></div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {activeTab === 'results' && (
-            <div className="ce-results">
-              {!runResults && !submitResults && !aiAnalysis && (
-                <p className="ce-empty">Run your code or use AI Debug to see results here.</p>
-              )}
-
-              {/* AI Debug Analysis Panel */}
-              {aiAnalysis && (
-                <div className={`ce-ai-analysis${vergeLight ? ' ce-ai-analysis--light' : ''}`}>
-                  <div className="ce-ai-header">
-                    <AIIcon /> <strong>Verge1.o Code Analysis</strong>
-                    <button className="ce-ai-light-toggle" onClick={() => setVergeLight(v => !v)} title="Toggle light mode"
-                      style={{ background: 'none', border: '1px solid currentColor', borderRadius: 6, padding: '2px 8px', fontSize: '0.7rem', cursor: 'pointer', color: 'inherit', opacity: 0.6 }}>
-                      {vergeLight ? '🌙' : '☀️'}
-                    </button>
-                    <span className={`ce-ai-verdict ${aiAnalysis.overallVerdict === 'accepted' ? 'ce-badge--pass' : 'ce-badge--fail'}`}>
-                      {aiAnalysis.overallVerdict?.toUpperCase() || 'UNKNOWN'} — {aiAnalysis.score ?? 0}%
-                    </span>
-                  </div>
-                  {aiAnalysis.compiles === false && (
-                    <div className="ce-ai-section ce-ai-error">
-                      <strong>Compilation Errors:</strong>
-                      {(aiAnalysis.syntaxErrors || []).map((e, i) => <div key={i}>• {e}</div>)}
-                    </div>
-                  )}
-                  {aiAnalysis.bugs?.length > 0 && (
-                    <div className="ce-ai-section ce-ai-bugs">
-                      <strong>Bugs Detected:</strong>
-                      {aiAnalysis.bugs.map((b, i) => <div key={i}>• {b}</div>)}
-                    </div>
-                  )}
-                  {aiAnalysis.suggestions?.length > 0 && (
-                    <div className="ce-ai-section ce-ai-suggestions">
-                      <strong>Optimization Suggestions:</strong>
-                      {aiAnalysis.suggestions.map((s, i) => <div key={i}>• {s}</div>)}
-                    </div>
-                  )}
-                  {aiAnalysis.error && (
-                    <div className="ce-ai-section ce-ai-error">
-                      <strong>AI Error:</strong> {aiAnalysis.error}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {(submitResults || runResults) && (() => {
-                const res = submitResults || runResults;
-                const passed = res.filter ? res.filter(r => r.passed).length : res.passedCount;
-                const total  = res.filter ? res.length : res.totalTests;
-                const results = res.testResults || res;
-                return (
-                  <>
-                    {submitResults && (
-                      <div className={`ce-verdict ${submitResults.status === 'accepted' ? 'ce-verdict--pass' : 'ce-verdict--fail'}`}>
-                        {submitResults.status === 'accepted' ? <><CheckIcon /> Accepted</> : `${submitResults.status.replace(/_/g, ' ').toUpperCase()}`}
-                        <span className="ce-verdict-score">{passed}/{total} passed · {submitResults.score}%</span>
-                      </div>
-                    )}
-                    <div className="ce-result-list">
-                      {results.map((r, i) => (
-                        <div key={i} className={`ce-result-item ${r.passed ? 'ce-result-item--pass' : 'ce-result-item--fail'}`}>
-                          <div className="ce-result-item-header">
-                            <span>{r.passed ? <CheckIcon /> : '✕'} Case {i + 1}</span>
-                            <span className="ce-result-time">{r.executionTime}ms</span>
-                          </div>
-                          {!r.passed && (
-                            <>
-                              <div className="ce-result-row"><span>Input:</span><code>{r.input}</code></div>
-                              <div className="ce-result-row"><span>Expected:</span><code>{r.expectedOutput}</code></div>
-                              <div className="ce-result-row"><span>Got:</span><code className="ce-wrong">{r.actualOutput}</code></div>
-                            </>
-                          )}
-                          {r.error && <div className="ce-result-error">{r.error}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
+        {/* --- Console --- */}
+        <div style={{ height: 200, backgroundColor: '#252526', borderTop: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '10px 20px', background: '#1e1e1e', fontSize: '13px', color: '#858585', fontWeight: 'bold' }}>
+            Console
+          </div>
+          <div 
+            style={{ flex: 1, padding: '10px 20px', fontSize: '13px', fontFamily: 'monospace', overflowY: 'auto', color: '#d4d4d4' }}
+            ref={consoleRef}
+          >
+            <div className="log-entry log-info">// Output will appear here...</div>
+          </div>
         </div>
       </div>
-
-      {/* ── Right: Editor Panel ── */}
-      <div className="ce-right">
-        {/* Toolbar */}
-        <div className="ce-toolbar">
-          <div className="ce-lang-selector">
-            {LANGUAGES.map(lang => (
-              <button key={lang.id}
-                id={`lang-${lang.id}`}
-                className={`ce-lang-btn${language === lang.id ? ' ce-lang-btn--active' : ''}`}
-                onClick={() => switchLanguage(lang.id)}
-                disabled={submitted || readOnly}>
-                {lang.label}
-              </button>
-            ))}
-          </div>
-          <div className="ce-toolbar-actions">
-            {!submitted && !readOnly && (
-              <button className="ce-reset-btn" onClick={() => setCode(question?.starterCode?.[language] || DEFAULT_STARTERS[language])} title="Reset to starter code">
-                <ResetIcon /> Reset
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Code Area */}
-        <div className="ce-editor-wrap" style={{ position: 'relative' }}>
-          <Editor
-            height="100%"
-            language={language === 'cpp' ? 'cpp' : language === 'javascript' ? 'javascript' : language === 'python' ? 'python' : language === 'java' ? 'java' : 'cpp'}
-            theme="vs"
-            value={code}
-            onChange={val => !readOnly && !submitted && setCode(val || '')}
-            options={{
-              fontSize: 14,
-              fontFamily: "'Courier New', monospace",
-              minimap: { enabled: false },
-              lineNumbers: 'on',
-              readOnly: readOnly || submitted,
-              scrollBeyondLastLine: false,
-              padding: { top: 12 },
-              automaticLayout: true,
-              autoClosingBrackets: 'always',
-              autoClosingQuotes: 'always',
-              autoClosingDelete: 'auto',
-              autoClosingOvertype: 'auto',
-              tabSize: 4,
-              renderWhitespace: 'selection',
-              cursorBlinking: 'smooth',
-            }}
-          />
-        </div>
-
-        {/* Bottom Actions */}
-        {!readOnly && (
-          <div className="ce-actions">
-            <button
-              id="run-code-btn"
-              className="ce-run-btn ip-btn-ghost"
-              onClick={handleRun}
-              disabled={running || submitted}>
-              <PlayIcon /> {running && !submitted ? 'Running…' : 'Run Code'}
-            </button>
-            <button
-              id="ai-debug-btn"
-              className="ce-ai-btn"
-              onClick={handleAIDebug}
-              disabled={aiLoading || submitted}
-              title="Analyze code with Verge1.o AI"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}>
-              <AIIcon /> {aiLoading ? 'Analyzing…' : 'AI Debug'}
-            </button>
-            <button
-              id="submit-code-btn"
-              className="ce-submit-btn ip-btn-primary"
-              onClick={handleSubmit}
-              disabled={running || submitted}>
-              <SendIcon /> {running && !submitted ? 'Submitting…' : submitted ? 'Submitted' : 'Submit'}
-            </button>
-          </div>
-        )}
-
-        {/* Submitted overlay */}
-        {submitted && !readOnly && submitResults && (
-          <div className={`ce-submitted-banner ${submitResults.status === 'accepted' ? 'ce-banner--pass' : 'ce-banner--fail'}`}>
-            <CheckIcon />
-            {submitResults.status === 'accepted'
-              ? `All ${submitResults.totalTests} tests passed!`
-              : `${submitResults.passedCount}/${submitResults.totalTests} tests passed`}
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   );
 };
 
-export default CodeEditor;
+export default Editor;
