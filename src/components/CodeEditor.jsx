@@ -611,7 +611,7 @@ vector<vector<string>> _parse_2d_string_array(const string& s) {
             bool inStr = false;
             int depth = 0;
             for (; i < t.size(); i++) {
-                if (t[i] == '"' && (i == 0 || t[i-1] != '\\')) inStr = !inStr;
+                if (t[i] == '"') inStr = !inStr;
                 else if (!inStr && t[i] == '[') depth++;
                 else if (!inStr && t[i] == ']') {
                     if (depth == 0) { i++; break; }
@@ -824,20 +824,81 @@ function javaFallback() {
 }
 
 // ── Default starter code generator ───────────────────────────────────────────
-function defaultStarter(lang, questionName) {
-  const camel = questionName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/)
-    .map((w, i) => i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)).join('');
-  const snake = questionName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-  switch (lang) {
-    case 'javascript':
-      return `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar ${camel} = function(nums, target) {\n    \n};`;
-    case 'python':
-      return `class Solution:\n    def ${snake}(self, nums: list[int], target: int) -> list[int]:\n        pass`;
-    case 'java':
-      return `class Solution {\n    public int[] ${camel}(int[] nums, int target) {\n        \n    }\n}`;
-    case 'cpp':
-      return `class Solution {\npublic:\n    vector<int> ${camel}(vector<int>& nums, int target) {\n        \n    }\n};`;
+// Generate LeetCode-accurate starter code based on question tags + title.
+// Falls back to a generic signature when we can't infer the type.
+function defaultStarter(lang, questionName, question) {
+  const camel = toCamel(questionName);
+  const snake = toSnake(questionName);
+  const tags = (question?.tags || []).join(' ').toLowerCase();
+  const isLinkedList = tags.includes('linked-list');
+  const isTree = tags.includes('trees') || tags.includes('tree');
+  const isDesign = tags.includes('design');
+  const isString = tags.includes('string') && !tags.includes('arrays');
+  const isNumOnly = tags.includes('math') || tags.includes('dynamic-programming');
+
+  // Determine signature based on problem type
+  let sig;
+  if (isDesign) {
+    // Design problem (e.g. LRU Cache) — class with multiple methods
+    sig = {
+      js: `var ${toPascal(questionName)} = function() {\n    \n};`,
+      py: `class ${toPascal(questionName)}:\n    def __init__(self):\n        pass`,
+      java: `class ${toPascal(questionName)} {\n    public ${toPascal(questionName)}() {\n        \n    }\n}`,
+      cpp: `class ${toPascal(questionName)} {\npublic:\n    ${toPascal(questionName)}() {\n        \n    }\n};`,
+    };
+  } else if (isLinkedList) {
+    sig = {
+      js: `/**\n * @param {ListNode} head\n * @return {ListNode}\n */\nvar ${camel} = function(head) {\n    \n};`,
+      py: `class Solution:\n    def ${camel}(self, head: Optional[ListNode]) -> Optional[ListNode]:\n        pass`,
+      java: `class Solution {\n    public ListNode ${camel}(ListNode head) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    ListNode* ${camel}(ListNode* head) {\n        \n    }\n};`,
+    };
+  } else if (isTree) {
+    sig = {
+      js: `/**\n * @param {TreeNode} root\n * @return {TreeNode}\n */\nvar ${camel} = function(root) {\n    \n};`,
+      py: `class Solution:\n    def ${camel}(self, root: Optional[TreeNode]) -> Optional[TreeNode]:\n        pass`,
+      java: `class Solution {\n    public TreeNode ${camel}(TreeNode root) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    TreeNode* ${camel}(TreeNode* root) {\n        \n    }\n};`,
+    };
+  } else if (isString) {
+    sig = {
+      js: `/**\n * @param {string} s\n * @return {boolean}\n */\nvar ${camel} = function(s) {\n    \n};`,
+      py: `class Solution:\n    def ${camel}(self, s: str) -> bool:\n        pass`,
+      java: `class Solution {\n    public boolean ${camel}(String s) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    bool ${camel}(string s) {\n        \n    }\n};`,
+    };
+  } else if (isNumOnly) {
+    sig = {
+      js: `/**\n * @param {number} n\n * @return {number}\n */\nvar ${camel} = function(n) {\n    \n};`,
+      py: `class Solution:\n    def ${camel}(self, n: int) -> int:\n        pass`,
+      java: `class Solution {\n    public int ${camel}(int n) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    int ${camel}(int n) {\n        \n    }\n};`,
+    };
+  } else {
+    // Default: array + int → array (Two Sum pattern)
+    sig = {
+      js: `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar ${camel} = function(nums, target) {\n    \n};`,
+      py: `class Solution:\n    def ${camel}(self, nums: List[int], target: int) -> List[int]:\n        pass`,
+      java: `class Solution {\n    public int[] ${camel}(int[] nums, int target) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    vector<int> ${camel}(vector<int>& nums, int target) {\n        \n    }\n};`,
+    };
   }
+  return sig[lang] || sig.js;
+}
+
+function toCamel(s) {
+  const words = String(s).match(/[a-zA-Z0-9]+/g) || ['solution'];
+  return words.map((w, i) =>
+    i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+  ).join('');
+}
+function toPascal(s) {
+  const words = String(s).match(/[a-zA-Z0-9]+/g) || ['Solution'];
+  return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
+}
+function toSnake(s) {
+  const words = String(s).match(/[a-zA-Z0-9]+/g) || ['solution'];
+  return words.map(w => w.toLowerCase()).join('_');
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -846,7 +907,7 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
   const [codeByLang, setCodeByLang] = useState(() => {
     const initial = { javascript: '', python: '', java: '', cpp: '' };
     for (const lang of Object.keys(initial)) {
-      initial[lang] = question.starterCode?.[lang] ?? defaultStarter(lang, question.question);
+      initial[lang] = question.starterCode?.[lang] ?? defaultStarter(lang, question.question, question);
     }
     return initial;
   });
@@ -1014,7 +1075,7 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
     setFinalResult(null); setActiveTab('testcase'); setActiveCaseIdx(0);
     const initial = { javascript: '', python: '', java: '', cpp: '' };
     for (const lang of Object.keys(initial)) {
-      initial[lang] = question.starterCode?.[lang] ?? defaultStarter(lang, question.question);
+      initial[lang] = question.starterCode?.[lang] ?? defaultStarter(lang, question.question, question);
     }
     setCodeByLang(initial);
   }
