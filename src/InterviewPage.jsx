@@ -3,7 +3,9 @@ import { CATEGORIES, DIFFICULTIES, getRandomQuestions, questions } from './data/
 import MCQQuestion from './components/MCQQuestion';
 import CodeEditor from './components/CodeEditor';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import './InterviewPage.css';
 import './components/AnalyticsDashboard.css';
+import './components/components.css';
 import { generateQuestions, isAiOnline } from './services/aiService';
 import { API_BASE } from './config/api.js';
 

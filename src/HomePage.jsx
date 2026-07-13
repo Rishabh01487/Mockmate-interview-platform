@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CATEGORIES } from './data/questions';
 import { API_BASE } from './config/api.js';
+import './HomePage.css';
 
 // ---- SVG Icon Library ----
 const Icon = ({ name, size = 18, className = '' }) => {

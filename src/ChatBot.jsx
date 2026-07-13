@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { chatCompletion, isAiOnline } from './services/aiService';
+import './ChatBot.css';
 
 // ============================================================
 // Verge1.o — AI Assistant
