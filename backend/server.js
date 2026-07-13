@@ -128,6 +128,9 @@ const allowedOrigins = [
   process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
   /\.vercel\.app$/,  // allow all *.vercel.app subdomains
   /\.github\.io$/,   // allow GitHub Pages (training dashboard)
+  /^http:\/\/localhost:\d+$/,            // allow any localhost port for dev
+  /^http:\/\/127\.0\.0\.1:\d+$/,        // allow 127.0.0.1 dev
+  /preview-.*\.space-z\.ai$/,         // allow sandbox preview URLs
 ].filter(Boolean);
 
 app.use(cors({
@@ -137,7 +140,7 @@ app.use(cors({
     const allowed = allowedOrigins.some(o =>
       o instanceof RegExp ? o.test(origin) : o === origin
     );
-    callback(allowed ? null : new Error('Not allowed by CORS'), allowed);
+    if (!allowed) { console.warn(`[CORS] Rejected origin: ${origin}`); return callback(null, false); } callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

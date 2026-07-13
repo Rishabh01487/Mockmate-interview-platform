@@ -28,7 +28,13 @@ export default function AuthPage({ onBack }) {
       login(data.token, data.user);
       if (onBack) onBack();
     } catch (err) {
-      setError(err.message || 'Something went wrong');
+      // Network/CORS errors produce generic "Failed to fetch" — give a clearer message
+      const msg = err?.message || '';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network')) {
+        setError('Cannot reach the Mockmate server. If the backend is sleeping on Render, please wait ~30s for it to wake up, then try again.');
+      } else {
+        setError(msg || 'Something went wrong');
+      }
     }
     setLoading(false);
   };
