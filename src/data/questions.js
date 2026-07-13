@@ -22,7 +22,7 @@ export const questions = {
       constraints: ['2 <= nums.length <= 10^4', '-10^9 <= target <= 10^9'],
       examples: [{ input: 'nums = [2,7,11,15], target = 9', output: '[0,1]' }],
       testCases: [ { input: '[2,7,11,15]\n9', expectedOutput: '[0,1]' }, { input: '[3,2,4]\n6', expectedOutput: '[1,2]' } ],
-      starterCode: { javascript: 'function twoSum(nums, target) {\n  \n}', python: 'def two_sum(nums, target):\n  pass' }
+      starterCode: { javascript: 'var twoSum = function(nums, target) {\n    \n};', python: 'class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        pass', java: 'class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        \n    }\n};' }
     },
     {
       id: 'lc-2', questionType: 'coding', question: 'Valid Parentheses', difficulty: 'Easy', tags: ['stack', 'string'], timeLimit: 1200,
@@ -30,7 +30,7 @@ export const questions = {
       constraints: ['1 <= s.length <= 10^4'],
       examples: [{ input: 's = "()[]{}"', output: 'true' }],
       testCases: [ { input: '()', expectedOutput: 'true' }, { input: '(]', expectedOutput: 'false' } ],
-      starterCode: { javascript: 'function isValid(s) {\n  \n}', python: 'def is_valid(s):\n  pass' }
+      starterCode: { javascript: 'var isValid = function(s) {\n    \n};', python: 'class Solution:\n    def isValid(self, s: str) -> bool:\n        pass', java: 'class Solution {\n    public boolean isValid(String s) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    bool isValid(string s) {\n        \n    }\n};' }
     },
     {
       id: 'lc-3', questionType: 'coding', question: 'Merge Two Sorted Lists', difficulty: 'Easy', tags: ['linked-list', 'pointers'], timeLimit: 1500,
@@ -38,7 +38,7 @@ export const questions = {
       constraints: ['The number of nodes in both lists is in the range [0, 50]'],
       examples: [{ input: 'list1 = [1,2,4], list2 = [1,3,4]', output: '[1,1,2,3,4,4]' }],
       testCases: [ { input: '[1,2,4]\n[1,3,4]', expectedOutput: '[1,1,2,3,4,4]' } ],
-      starterCode: { javascript: 'function mergeTwoLists(list1, list2) {\n  \n}', python: 'def merge_two_lists(list1, list2):\n  pass' }
+      starterCode: { javascript: 'var mergeTwoLists = function(list1, list2) {\n    \n};', python: 'class Solution:\n    def mergeTwoLists(self, list1: Optional[ListNode], list2: Optional[ListNode]) -> Optional[ListNode]:\n        pass', java: 'class Solution {\n    public ListNode mergeTwoLists(ListNode list1, ListNode list2) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    ListNode* mergeTwoLists(ListNode* list1, ListNode* list2) {\n        \n    }\n};' }
     },
     {
       id: 'lc-4', questionType: 'coding', question: 'Maximum Subarray', difficulty: 'Medium', tags: ['arrays', 'dynamic-programming'], timeLimit: 1800,
@@ -46,7 +46,7 @@ export const questions = {
       constraints: ['1 <= nums.length <= 10^5'],
       examples: [{ input: 'nums = [-2,1,-3,4,-1,2,1,-5,4]', output: '6', explanation: '[4,-1,2,1] has the largest sum 6.' }],
       testCases: [ { input: '[-2,1,-3,4,-1,2,1,-5,4]', expectedOutput: '6' } ],
-      starterCode: { javascript: 'function maxSubArray(nums) {\n  \n}', python: 'def max_sub_array(nums):\n  pass' }
+      starterCode: { javascript: 'var maxSubArray = function(nums) {\n    \n};', python: 'class Solution:\n    def maxSubArray(self, nums: List[int]) -> int:\n        pass', java: 'class Solution {\n    public int maxSubArray(int[] nums) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    int maxSubArray(vector<int>& nums) {\n        \n    }\n};' }
     },
     {
       id: 'lc-5', questionType: 'coding', question: 'Climbing Stairs', difficulty: 'Easy', tags: ['dynamic-programming'], timeLimit: 1200,
@@ -54,7 +54,7 @@ export const questions = {
       constraints: ['1 <= n <= 45'],
       examples: [{ input: 'n = 3', output: '3', explanation: '1+1+1, 1+2, 2+1' }],
       testCases: [ { input: '3', expectedOutput: '3' }, { input: '5', expectedOutput: '8' } ],
-      starterCode: { javascript: 'function climbStairs(n) {\n  \n}', python: 'def climb_stairs(n):\n  pass' }
+      starterCode: { javascript: 'var climbStairs = function(n) {\n    \n};', python: 'class Solution:\n    def climbStairs(self, n: int) -> int:\n        pass', java: 'class Solution {\n    public int climbStairs(int n) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    int climbStairs(int n) {\n        \n    }\n};' }
     },
     {
       id: 'lc-6', questionType: 'coding', question: 'Valid Anagram', difficulty: 'Easy', tags: ['hash-map', 'string'], timeLimit: 1200,
@@ -62,7 +62,7 @@ export const questions = {
       constraints: ['1 <= s.length, t.length <= 5 * 10^4'],
       examples: [{ input: 's = "anagram", t = "nagaram"', output: 'true' }],
       testCases: [ { input: 'anagram\nnagaram', expectedOutput: 'true' }, { input: 'rat\ncar', expectedOutput: 'false' } ],
-      starterCode: { javascript: 'function isAnagram(s, t) {\n  \n}', python: 'def is_anagram(s, t):\n  pass' }
+      starterCode: { javascript: 'var isAnagram = function(s, t) {\n    \n};', python: 'class Solution:\n    def isAnagram(self, s: str, t: str) -> bool:\n        pass', java: 'class Solution {\n    public boolean isAnagram(String s, String t) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    bool isAnagram(string s, string t) {\n        \n    }\n};' }
     },
     {
       id: 'lc-7', questionType: 'coding', question: 'Binary Search', difficulty: 'Easy', tags: ['arrays', 'binary-search'], timeLimit: 1200,
@@ -70,7 +70,7 @@ export const questions = {
       constraints: ['1 <= nums.length <= 10^4'],
       examples: [{ input: 'nums = [-1,0,3,5,9,12], target = 9', output: '4' }],
       testCases: [ { input: '[-1,0,3,5,9,12]\n9', expectedOutput: '4' } ],
-      starterCode: { javascript: 'function search(nums, target) {\n  \n}', python: 'def search(nums, target):\n  pass' }
+      starterCode: { javascript: 'var search = function(nums, target) {\n    \n};', python: 'class Solution:\n    def search(self, nums: List[int], target: int) -> int:\n        pass', java: 'class Solution {\n    public int search(int[] nums, int target) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    int search(vector<int>& nums, int target) {\n        \n    }\n};' }
     },
     {
       id: 'lc-8', questionType: 'coding', question: 'Reverse Linked List', difficulty: 'Easy', tags: ['linked-list'], timeLimit: 1500,
@@ -78,7 +78,7 @@ export const questions = {
       constraints: ['The number of nodes in the list is the range [0, 5000]'],
       examples: [{ input: 'head = [1,2,3,4,5]', output: '[5,4,3,2,1]' }],
       testCases: [ { input: '[1,2,3,4,5]', expectedOutput: '[5,4,3,2,1]' } ],
-      starterCode: { javascript: 'function reverseList(head) {\n  \n}', python: 'def reverse_list(head):\n  pass' }
+      starterCode: { javascript: 'var reverseList = function(head) {\n    \n};', python: 'class Solution:\n    def reverseList(self, head: Optional[ListNode]) -> Optional[ListNode]:\n        pass', java: 'class Solution {\n    public ListNode reverseList(ListNode head) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    ListNode* reverseList(ListNode* head) {\n        \n    }\n};' }
     },
     {
       id: 'lc-9', questionType: 'coding', question: 'Invert Binary Tree', difficulty: 'Easy', tags: ['trees', 'dfs'], timeLimit: 1500,
@@ -86,7 +86,7 @@ export const questions = {
       constraints: ['The number of nodes in the tree is in the range [0, 100]'],
       examples: [{ input: 'root = [4,2,7,1,3,6,9]', output: '[4,7,2,9,6,3,1]' }],
       testCases: [ { input: '[4,2,7,1,3,6,9]', expectedOutput: '[4,7,2,9,6,3,1]' } ],
-      starterCode: { javascript: 'function invertTree(root) {\n  \n}', python: 'def invert_tree(root):\n  pass' }
+      starterCode: { javascript: 'var invertTree = function(root) {\n    \n};', python: 'class Solution:\n    def invertTree(self, root: Optional[TreeNode]) -> Optional[TreeNode]:\n        pass', java: 'class Solution {\n    public TreeNode invertTree(TreeNode root) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    TreeNode* invertTree(TreeNode* root) {\n        \n    }\n};' }
     },
     {
       id: 'lc-10', questionType: 'coding', question: 'Longest Substring Without Repeating Characters', difficulty: 'Medium', tags: ['string', 'sliding-window'], timeLimit: 2400,
@@ -94,7 +94,7 @@ export const questions = {
       constraints: ['0 <= s.length <= 5 * 10^4'],
       examples: [{ input: 's = "abcabcbb"', output: '3', explanation: 'The answer is "abc", with the length of 3.' }],
       testCases: [ { input: 'abcabcbb', expectedOutput: '3' }, { input: 'bbbbb', expectedOutput: '1' }, { input: 'pwwkew', expectedOutput: '3' } ],
-      starterCode: { javascript: 'function lengthOfLongestSubstring(s) {\n  \n}', python: 'def length_of_longest_substring(s):\n  pass' }
+      starterCode: { javascript: 'var lengthOfLongestSubstring = function(s) {\n    \n};', python: 'class Solution:\n    def lengthOfLongestSubstring(self, s: str) -> int:\n        pass', java: 'class Solution {\n    public int lengthOfLongestSubstring(String s) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    int lengthOfLongestSubstring(string s) {\n        \n    }\n};' }
     },
     {
       id: 'lc-11', questionType: 'coding', question: 'Product of Array Except Self', difficulty: 'Medium', tags: ['arrays', 'prefix-sum'], timeLimit: 2400,
@@ -102,7 +102,7 @@ export const questions = {
       constraints: ['2 <= nums.length <= 10^5'],
       examples: [{ input: 'nums = [1,2,3,4]', output: '[24,12,8,6]' }],
       testCases: [ { input: '[1,2,3,4]', expectedOutput: '[24,12,8,6]' } ],
-      starterCode: { javascript: 'function productExceptSelf(nums) {\n  \n}', python: 'def product_except_self(nums):\n  pass' }
+      starterCode: { javascript: 'var productExceptSelf = function(nums) {\n    \n};', python: 'class Solution:\n    def productExceptSelf(self, nums: List[int]) -> List[int]:\n        pass', java: 'class Solution {\n    public int[] productExceptSelf(int[] nums) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    vector<int> productExceptSelf(vector<int>& nums) {\n        \n    }\n};' }
     },
     {
       id: 'lc-12', questionType: 'coding', question: 'Coin Change', difficulty: 'Medium', tags: ['dynamic-programming'], timeLimit: 2400,
@@ -110,7 +110,7 @@ export const questions = {
       constraints: ['1 <= coins.length <= 12'],
       examples: [{ input: 'coins = [1,2,5], amount = 11', output: '3', explanation: '11 = 5 + 5 + 1' }],
       testCases: [ { input: '[1,2,5]\n11', expectedOutput: '3' } ],
-      starterCode: { javascript: 'function coinChange(coins, amount) {\n  \n}', python: 'def coin_change(coins, amount):\n  pass' }
+      starterCode: { javascript: 'var coinChange = function(coins, amount) {\n    \n};', python: 'class Solution:\n    def coinChange(self, coins: List[int], amount: int) -> int:\n        pass', java: 'class Solution {\n    public int coinChange(int[] coins, int amount) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    int coinChange(vector<int>& coins, int amount) {\n        \n    }\n};' }
     },
     {
       id: 'lc-13', questionType: 'coding', question: 'Number of Islands', difficulty: 'Medium', tags: ['graphs', 'bfs', 'dfs'], timeLimit: 2400,
@@ -118,7 +118,7 @@ export const questions = {
       constraints: ['m == grid.length', 'n == grid[i].length'],
       examples: [{ input: 'grid = [["1","1","0","0","0"],["1","1","0","0","0"],["0","0","1","0","0"],["0","0","0","1","1"]]', output: '3' }],
       testCases: [ { input: '[["1","1","0","0","0"],["1","1","0","0","0"],["0","0","1","0","0"],["0","0","0","1","1"]]', expectedOutput: '3' } ],
-      starterCode: { javascript: 'function numIslands(grid) {\n  \n}', python: 'def num_islands(grid):\n  pass' }
+      starterCode: { javascript: 'var numIslands = function(grid) {\n    \n};', python: 'class Solution:\n    def numIslands(self, grid: List[List[str]]) -> int:\n        pass', java: 'class Solution {\n    public int numIslands(char[][] grid) {\n        \n    }\n}', cpp: 'class Solution {\npublic:\n    int numIslands(vector<vector<char>>& grid) {\n        \n    }\n};' }
     },
     {
       id: 'lc-14', questionType: 'coding', question: 'LRU Cache', difficulty: 'Medium', tags: ['design', 'hash-map', 'linked-list'], timeLimit: 3000,
@@ -126,7 +126,7 @@ export const questions = {
       constraints: ['1 <= capacity <= 3000'],
       examples: [{ input: '["LRUCache", "put", "put", "get"]', output: '[null, null, null, 1]' }],
       testCases: [ { input: '["LRUCache", "put", "put", "get"]\n[[2], [1, 1], [2, 2], [1]]', expectedOutput: '[null, null, null, 1]' } ],
-      starterCode: { javascript: 'class LRUCache {\n  constructor(capacity) {\n  }\n  get(key) {\n  }\n  put(key, value) {\n  }\n}', python: 'class LRUCache:\n  def __init__(self, capacity: int):\n    pass' }
+      starterCode: { javascript: 'class LRUCache {\n    constructor(capacity) {\n        \n    }\n    get(key) {\n        \n    }\n    put(key, value) {\n        \n    }\n}', python: 'class LRUCache:\n    def __init__(self, capacity: int):\n        pass\n    def get(self, key: int) -> int:\n        pass\n    def put(self, key: int, value: int) -> None:\n        pass', java: 'class LRUCache {\n    public LRUCache(int capacity) {\n        \n    }\n    public int get(int key) {\n        \n    }\n    public void put(int key, int value) {\n        \n    }\n}', cpp: 'class LRUCache {\npublic:\n    LRUCache(int capacity) {\n        \n    }\n    int get(int key) {\n        \n    }\n    void put(int key, int value) {\n        \n    }\n};' }
     },
     {
       id: 'dsa-mcq-1',
