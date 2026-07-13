@@ -363,3 +363,491 @@ export function getFunctionNameFor(titleSlug) {
 export function isDesignProblem(titleSlug) {
   return !!LEETCODE_TESTCASES[titleSlug]?.isDesign;
 }
+
+/**
+ * Reference solutions for auto-verification.
+ *
+ * When a problem has a reference solution, the editor can generate expected
+ * outputs for ANY test input by running the reference solution. This means
+ * we don't need to hardcode expected outputs — we just need a correct
+ * solution, and the system will verify the user's output against it.
+ *
+ * This is how real judges work: they run a known-correct solution to
+ * generate expected outputs, then compare the user's output.
+ *
+ * Each entry: { titleSlug, solution (JS function), functionName }
+ * The solution is a JS function that takes the same arguments as the
+ * LeetCode problem and returns the expected output.
+ */
+export const REFERENCE_SOLUTIONS = {
+  'two-sum': {
+    functionName: 'twoSum',
+    solution: (nums, target) => {
+      const map = new Map();
+      for (let i = 0; i < nums.length; i++) {
+        const comp = target - nums[i];
+        if (map.has(comp)) return [map.get(comp), i];
+        map.set(nums[i], i);
+      }
+      return [];
+    },
+  },
+  'valid-parentheses': {
+    functionName: 'isValid',
+    solution: (s) => {
+      const st = [], m = { ')': '(', '}': '{', ']': '[' };
+      for (const c of s) {
+        if ('({['.includes(c)) st.push(c);
+        else if (st.pop() !== m[c]) return false;
+      }
+      return st.length === 0;
+    },
+  },
+  'palindrome-number': {
+    functionName: 'isPalindrome',
+    solution: (x) => {
+      if (x < 0) return false;
+      const s = String(x);
+      return s === s.split('').reverse().join('');
+    },
+  },
+  'roman-to-integer': {
+    functionName: 'romanToInt',
+    solution: (s) => {
+      const v = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+      let r = 0;
+      for (let i = 0; i < s.length; i++) {
+        if (i + 1 < s.length && v[s[i]] < v[s[i + 1]]) r -= v[s[i]];
+        else r += v[s[i]];
+      }
+      return r;
+    },
+  },
+  'longest-common-prefix': {
+    functionName: 'longestCommonPrefix',
+    solution: (strs) => {
+      if (!strs.length) return '';
+      let p = strs[0];
+      for (const s of strs) while (!s.startsWith(p)) p = p.slice(0, -1);
+      return p;
+    },
+  },
+  'remove-duplicates-from-sorted-array': {
+    functionName: 'removeDuplicates',
+    solution: (nums) => {
+      if (!nums.length) return 0;
+      let k = 1;
+      for (let i = 1; i < nums.length; i++) if (nums[i] !== nums[i - 1]) nums[k++] = nums[i];
+      return k;
+    },
+  },
+  'remove-element': {
+    functionName: 'removeElement',
+    solution: (nums, val) => {
+      let k = 0;
+      for (let i = 0; i < nums.length; i++) if (nums[i] !== val) nums[k++] = nums[i];
+      return k;
+    },
+  },
+  'search-insert-position': {
+    functionName: 'searchInsert',
+    solution: (nums, target) => {
+      let l = 0, r = nums.length;
+      while (l < r) { const m = (l + r) >> 1; if (nums[m] < target) l = m + 1; else r = m; }
+      return l;
+    },
+  },
+  'length-of-last-word': {
+    functionName: 'lengthOfLastWord',
+    solution: (s) => {
+      const w = s.trim().split(' ');
+      return w[w.length - 1].length;
+    },
+  },
+  'plus-one': {
+    functionName: 'plusOne',
+    solution: (digits) => {
+      for (let i = digits.length - 1; i >= 0; i--) {
+        if (digits[i] < 9) { digits[i]++; return digits; }
+        digits[i] = 0;
+      }
+      return [1, ...digits];
+    },
+  },
+  'add-binary': {
+    functionName: 'addBinary',
+    solution: (a, b) => {
+      return (BigInt('0b' + a) + BigInt('0b' + b)).toString(2);
+    },
+  },
+  'sqrtx': {
+    functionName: 'mySqrt',
+    solution: (x) => Math.floor(Math.sqrt(x)),
+  },
+  'climbing-stairs': {
+    functionName: 'climbStairs',
+    solution: (n) => {
+      if (n <= 2) return n;
+      let a = 1, b = 2;
+      for (let i = 3; i <= n; i++) [a, b] = [b, a + b];
+      return b;
+    },
+  },
+  'merge-sorted-array': {
+    functionName: 'merge',
+    solution: (nums1, m, nums2, n) => {
+      let i = m - 1, j = n - 1, k = m + n - 1;
+      while (j >= 0) {
+        if (i >= 0 && nums1[i] > nums2[j]) nums1[k--] = nums1[i--];
+        else nums1[k--] = nums2[j--];
+      }
+      return nums1.slice(0, m + n);
+    },
+  },
+  'binary-tree-inorder-traversal': {
+    functionName: 'inorderTraversal',
+    solution: (root) => {
+      const r = [];
+      const f = (n) => { if (!n) return; f(n.left); r.push(n.val); f(n.right); };
+      f(root);
+      return r;
+    },
+  },
+  'symmetric-tree': {
+    functionName: 'isSymmetric',
+    solution: (root) => {
+      const f = (a, b) => {
+        if (!a && !b) return true;
+        if (!a || !b) return false;
+        return a.val === b.val && f(a.left, b.right) && f(a.right, b.left);
+      };
+      return f(root, root);
+    },
+  },
+  'maximum-depth-of-binary-tree': {
+    functionName: 'maxDepth',
+    solution: (root) => {
+      if (!root) return 0;
+      return 1 + Math.max(solution(root.left), solution(root.right));
+      function solution(n) { return n ? 1 + Math.max(solution(n.left), solution(n.right)) : 0; }
+    },
+  },
+  'balanced-binary-tree': {
+    functionName: 'isBalanced',
+    solution: (root) => {
+      const f = (n) => {
+        if (!n) return 0;
+        const l = f(n.left), r = f(n.right);
+        if (l === -1 || r === -1 || Math.abs(l - r) > 1) return -1;
+        return 1 + Math.max(l, r);
+      };
+      return f(root) !== -1;
+    },
+  },
+  'minimum-depth-of-binary-tree': {
+    functionName: 'minDepth',
+    solution: (root) => {
+      if (!root) return 0;
+      if (!root.left) return 1 + solution(root.right);
+      if (!root.right) return 1 + solution(root.left);
+      return 1 + Math.min(solution(root.left), solution(root.right));
+      function solution(n) { if (!n) return 0; if (!n.left) return 1 + solution(n.right); if (!n.right) return 1 + solution(n.left); return 1 + Math.min(solution(n.left), solution(n.right)); }
+    },
+  },
+  'path-sum': {
+    functionName: 'hasPathSum',
+    solution: (root, targetSum) => {
+      if (!root) return false;
+      if (!root.left && !root.right) return root.val === targetSum;
+      return solution(root.left, targetSum - root.val) || solution(root.right, targetSum - root.val);
+      function solution(n, t) { if (!n) return false; if (!n.left && !n.right) return n.val === t; return solution(n.left, t - n.val) || solution(n.right, t - n.val); }
+    },
+  },
+  'pascals-triangle': {
+    functionName: 'generate',
+    solution: (numRows) => {
+      const r = [];
+      for (let i = 0; i < numRows; i++) {
+        const row = Array(i + 1).fill(1);
+        for (let j = 1; j < i; j++) row[j] = r[i - 1][j - 1] + r[i - 1][j];
+        r.push(row);
+      }
+      return r;
+    },
+  },
+  'pascals-triangle-ii': {
+    functionName: 'getRow',
+    solution: (rowIndex) => {
+      const row = [1];
+      for (let i = 0; i < rowIndex; i++) {
+        for (let j = i + 1; j > 0; j--) row[j] = (row[j] || 0) + row[j - 1];
+        row[0] = 1;
+      }
+      return row;
+    },
+  },
+  'best-time-to-buy-and-sell-stock': {
+    functionName: 'maxProfit',
+    solution: (prices) => {
+      let min = Infinity, max = 0;
+      for (const p of prices) { min = Math.min(min, p); max = Math.max(max, p - min); }
+      return max;
+    },
+  },
+  'valid-palindrome': {
+    functionName: 'isPalindrome',
+    solution: (s) => {
+      const c = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return c === c.split('').reverse().join('');
+    },
+  },
+  'single-number': {
+    functionName: 'singleNumber',
+    solution: (nums) => nums.reduce((a, b) => a ^ b, 0),
+  },
+  'linked-list-cycle': {
+    functionName: 'hasCycle',
+    solution: (head) => {
+      let slow = head, fast = head;
+      while (fast && fast.next) { slow = slow.next; fast = fast.next.next; if (slow === fast) return true; }
+      return false;
+    },
+  },
+  'intersection-of-two-linked-lists': {
+    functionName: 'getIntersectionNode',
+    solution: (headA, headB) => {
+      let a = headA, b = headB;
+      while (a !== b) { a = a ? a.next : headB; b = b ? b.next : headA; }
+      return a;
+    },
+  },
+  'missing-number': {
+    functionName: 'missingNumber',
+    solution: (nums) => {
+      const n = nums.length;
+      return n * (n + 1) / 2 - nums.reduce((a, b) => a + b, 0);
+    },
+  },
+  'move-zeroes': {
+    functionName: 'moveZeroes',
+    solution: (nums) => {
+      let j = 0;
+      for (let i = 0; i < nums.length; i++) if (nums[i] !== 0) [nums[j++], nums[i]] = [nums[i], nums[j]];
+      return nums;
+    },
+  },
+  'word-pattern': {
+    functionName: 'wordPattern',
+    solution: (pattern, s) => {
+      const w = s.split(' ');
+      if (pattern.length !== w.length) return false;
+      const m1 = {}, m2 = {};
+      for (let i = 0; i < pattern.length; i++) {
+        if (m1[pattern[i]] !== m2[w[i]]) return false;
+        m1[pattern[i]] = i; m2[w[i]] = i;
+      }
+      return true;
+    },
+  },
+  'range-sum-query-immutable': {
+    functionName: 'NumArray',
+    isDesign: true,
+    solution: (nums) => {
+      // Design problem — skip auto-verification
+      return null;
+    },
+  },
+  'is-subsequence': {
+    functionName: 'isSubsequence',
+    solution: (s, t) => {
+      let i = 0;
+      for (const c of t) if (i < s.length && c === s[i]) i++;
+      return i === s.length;
+    },
+  },
+  'merge-two-binary-trees': {
+    functionName: 'mergeTrees',
+    solution: (root1, root2) => {
+      if (!root1) return root2;
+      if (!root2) return root1;
+      root1.val += root2.val;
+      root1.left = solution(root1.left, root2.left);
+      root1.right = solution(root1.right, root2.right);
+      return root1;
+      function solution(a, b) { if (!a) return b; if (!b) return a; a.val += b.val; a.left = solution(a.left, b.left); a.right = solution(a.right, b.right); return a; }
+    },
+  },
+  'detect-capital': {
+    functionName: 'detectCapitalUse',
+    solution: (word) => {
+      if (word === word.toUpperCase()) return true;
+      if (word === word.toLowerCase()) return true;
+      if (word[0] === word[0].toUpperCase() && word.slice(1) === word.slice(1).toLowerCase()) return true;
+      return false;
+    },
+  },
+  'find-the-difference': {
+    functionName: 'findTheDifference',
+    solution: (s, t) => {
+      let r = 0;
+      for (const c of s + t) r ^= c.charCodeAt(0);
+      return String.fromCharCode(r);
+    },
+  },
+  'find-all-numbers-disappeared-in-an-array': {
+    functionName: 'findDisappearedNumbers',
+    solution: (nums) => {
+      const r = [];
+      for (let i = 0; i < nums.length; i++) {
+        const idx = Math.abs(nums[i]) - 1;
+        if (nums[idx] > 0) nums[idx] = -nums[idx];
+      }
+      for (let i = 0; i < nums.length; i++) if (nums[i] > 0) r.push(i + 1);
+      return r;
+    },
+  },
+  'hamming-distance': {
+    functionName: 'hammingDistance',
+    solution: (x, y) => (x ^ y).toString(2).split('').filter(c => c === '1').length,
+  },
+  'number-complement': {
+    functionName: 'findComplement',
+    solution: (num) => {
+      const b = num.toString(2);
+      return parseInt(b.split('').map(c => c === '1' ? '0' : '1').join(''), 2);
+    },
+  },
+  'reverse-words-in-a-string-iii': {
+    functionName: 'reverseWords',
+    solution: (s) => s.split(' ').map(w => w.split('').reverse().join('')).join(' '),
+  },
+  'average-of-levels-in-binary-tree': {
+    functionName: 'averageOfLevels',
+    solution: (root) => {
+      const r = [];
+      const q = root ? [root] : [];
+      while (q.length) {
+        const n = q.length, sum = q.reduce((a, b) => a + b.val, 0);
+        r.push(sum / n);
+        for (let i = 0; i < n; i++) {
+          const node = q.shift();
+          if (node.left) q.push(node.left);
+          if (node.right) q.push(node.right);
+        }
+      }
+      return r;
+    },
+  },
+  'maximum-product-of-three-numbers': {
+    functionName: 'maximumProduct',
+    solution: (nums) => {
+      nums.sort((a, b) => a - b);
+      const n = nums.length;
+      return Math.max(nums[0] * nums[1] * nums[n - 1], nums[n - 3] * nums[n - 2] * nums[n - 1]);
+    },
+  },
+  'kth-largest-element-in-a-stream': {
+    functionName: 'KthLargest',
+    isDesign: true,
+    solution: () => null,
+  },
+  'peak-index-in-a-mountain-array': {
+    functionName: 'peakIndexInMountainArray',
+    solution: (arr) => arr.indexOf(Math.max(...arr)),
+  },
+  'leaf-similar-trees': {
+    functionName: 'leafSimilar',
+    solution: (root1, root2) => {
+      const l1 = [], l2 = [];
+      const f = (n, l) => { if (!n) return; if (!n.left && !n.right) l.push(n.val); f(n.left, l); f(n.right, l); };
+      f(root1, l1); f(root2, l2);
+      return JSON.stringify(l1) === JSON.stringify(l2);
+    },
+  },
+  'robot-return-to-origin': {
+    functionName: 'judgeCircle',
+    solution: (moves) => {
+      let x = 0, y = 0;
+      for (const m of moves) { if (m === 'U') y++; if (m === 'D') y--; if (m === 'L') x--; if (m === 'R') x++; }
+      return x === 0 && y === 0;
+    },
+  },
+  'backspace-string-compare': {
+    functionName: 'backspaceCompare',
+    solution: (s, t) => {
+      const f = (str) => { const r = []; for (const c of str) { if (c === '#') r.pop(); else r.push(c); } return r.join(''); };
+      return f(s) === f(t);
+    },
+  },
+  'min-stack': {
+    functionName: 'MinStack',
+    isDesign: true,
+    solution: () => null,
+  },
+  'reverse-string': {
+    functionName: 'reverseString',
+    solution: (s) => { s.reverse(); return s; },
+  },
+  'middle-of-the-linked-list': {
+    functionName: 'middleNode',
+    solution: (head) => {
+      let slow = head, fast = head;
+      while (fast && fast.next) { slow = slow.next; fast = fast.next.next; }
+      return slow;
+    },
+  },
+  'uncommon-words-from-two-sentences': {
+    functionName: 'uncommonFromSentences',
+    solution: (s1, s2) => {
+      const count = {};
+      for (const w of (s1 + ' ' + s2).split(' ')) count[w] = (count[w] || 0) + 1;
+      return Object.keys(count).filter(w => count[w] === 1);
+    },
+  },
+};
+
+/**
+ * Get the reference solution for a problem.
+ * Returns { functionName, solution, isDesign } or null.
+ */
+export function getReferenceSolution(titleSlug) {
+  return REFERENCE_SOLUTIONS[titleSlug] || null;
+}
+
+/**
+ * Generate expected output for a test input using the reference solution.
+ * Returns the expected output as a string, or null if no reference solution.
+ */
+export function generateExpectedOutput(titleSlug, input) {
+  const ref = REFERENCE_SOLUTIONS[titleSlug];
+  if (!ref || ref.isDesign || !ref.solution) return null;
+
+  try {
+    // Parse the input (one value per line)
+    const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
+    const args = lines.map(line => {
+      if (line === 'true') return true;
+      if (line === 'false') return false;
+      if (line.startsWith('[')) {
+        try { return JSON.parse(line); } catch { return line; }
+      }
+      if (/^-?\d+$/.test(line)) return parseInt(line, 10);
+      if (/^-?\d+\.\d+$/.test(line)) return parseFloat(line);
+      return line;
+    });
+
+    const result = ref.solution(...args);
+
+    // Format the result
+    if (typeof result === 'boolean') return result ? 'true' : 'false';
+    if (typeof result === 'number') return String(result);
+    if (typeof result === 'string') return result;
+    if (Array.isArray(result)) return JSON.stringify(result);
+    if (result === null || result === undefined) return 'null';
+    return JSON.stringify(result);
+  } catch (err) {
+    console.warn('[Reference solution] Error:', err.message);
+    return null;
+  }
+}
+

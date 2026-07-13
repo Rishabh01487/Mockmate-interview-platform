@@ -30,7 +30,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { API_BASE } from '../config/api.js';
-import { getTestCasesFor } from '../data/leetcodeTestcases.js';
+import { getTestCasesFor, getReferenceSolution, generateExpectedOutput } from '../data/leetcodeTestcases.js';
 
 // ── Language metadata ────────────────────────────────────────────────────────
 const LANGUAGES = [
@@ -1020,16 +1020,16 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
         }
 
         // ── Test cases ──────────────────────────────────────────────────────
-        // Priority: curated database (with expected outputs) > example testcases
+        // Priority: curated database > reference solution auto-verify > examples
         const curatedTestCases = getTestCasesFor(question.titleSlug);
+        const refSolution = getReferenceSolution(question.titleSlug);
         let testCases;
 
         if (curatedTestCases && curatedTestCases.length > 0) {
-          // Use curated test cases — these have expected outputs and verify
-          // the solution like a real judge
+          // Level 1: Curated test cases with hardcoded expected outputs
           testCases = curatedTestCases;
         } else {
-          // Fall back to example testcases from the problem description
+          // Level 2/3: Use example testcases from the problem description
           const testcaseStr = data.exampleTestcases || '';
           const tcLines = testcaseStr.split('\n').map(l => l.trim()).filter(Boolean);
           let paramCount = 1;
@@ -1049,20 +1049,30 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
             testCases.push({ input: tcLines.join('\n'), expectedOutput: '' });
           }
 
-          // Match test cases to examples to fill in expected outputs
-          if (examples.length > 0 && testCases.length > 0) {
+          // Level 2: Auto-generate expected outputs using reference solution
+          if (refSolution && !refSolution.isDesign && refSolution.solution) {
             for (const tc of testCases) {
-              const tcValues = tc.input.split('\n').map(v => v.trim());
-              for (const ex of examples) {
-                const exInputStr = ex.input || '';
-                const valueMatches = exInputStr.match(/=\s*([^,=]+(?:\[[^\]]*\])?)/g);
-                if (valueMatches) {
-                  const exValues = valueMatches.map(v => v.replace(/^=\s*/, '').trim());
-                  const matches = exValues.length === tcValues.length &&
-                    exValues.every((ev, i) => normalize(ev) === normalize(tcValues[i]));
-                  if (matches) {
-                    tc.expectedOutput = (ex.output || '').trim();
-                    break;
+              const generated = generateExpectedOutput(question.titleSlug, tc.input);
+              if (generated !== null) {
+                tc.expectedOutput = generated;
+              }
+            }
+          } else {
+            // Level 3: Match test cases to examples to fill in expected outputs
+            if (examples.length > 0 && testCases.length > 0) {
+              for (const tc of testCases) {
+                const tcValues = tc.input.split('\n').map(v => v.trim());
+                for (const ex of examples) {
+                  const exInputStr = ex.input || '';
+                  const valueMatches = exInputStr.match(/=\s*([^,=]+(?:\[[^\]]*\])?)/g);
+                  if (valueMatches) {
+                    const exValues = valueMatches.map(v => v.replace(/^=\s*/, '').trim());
+                    const matches = exValues.length === tcValues.length &&
+                      exValues.every((ev, i) => normalize(ev) === normalize(tcValues[i]));
+                    if (matches) {
+                      tc.expectedOutput = (ex.output || '').trim();
+                      break;
+                    }
                   }
                 }
               }
