@@ -997,12 +997,27 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
           });
         });
 
+        // Store BOTH plain text (for matching) AND raw HTML (for rich rendering)
         const fullText = doc.body.textContent.replace(/\s+/g, ' ').trim();
         let statement = fullText;
         const exIdx = fullText.indexOf('Example 1:');
         const conIdx = fullText.indexOf('Constraints:');
         if (exIdx > 0) statement = fullText.substring(0, exIdx).trim();
         else if (conIdx > 0) statement = fullText.substring(0, conIdx).trim();
+
+        // Extract the HTML for the statement portion (before "Example 1:")
+        // This preserves images, visualizations, formatted code blocks, etc.
+        let statementHtml = html;
+        // Try to find where "Example" starts in the HTML and cut there
+        const exampleHtmlMatch = html.match(/<p><strong class="example">/i);
+        if (exampleHtmlMatch && exampleHtmlMatch.index > 0) {
+          statementHtml = html.substring(0, exampleHtmlMatch.index);
+        }
+        // Also cut at "Constraints:"
+        const constraintsHtmlMatch = statementHtml.match(/<p><strong>Constraints:<\/strong>/i);
+        if (constraintsHtmlMatch && constraintsHtmlMatch.index > 0) {
+          statementHtml = statementHtml.substring(0, constraintsHtmlMatch.index);
+        }
 
         // ── Test cases ──────────────────────────────────────────────────────
         // Priority: curated database (with expected outputs) > example testcases
@@ -1059,6 +1074,7 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
           setEnrichedQuestion({
             ...question,
             problemStatement: statement,
+            problemStatementHtml: statementHtml,
             examples,
             constraints,
             testCases,
@@ -1332,7 +1348,11 @@ const ProblemDescription = ({ question, diffColor, contentLoading }) => (
       </div>
     ) : (
       <>
-        {question.problemStatement && <p style={{ fontSize: 14, lineHeight: 1.7, color: LC.text, margin: '0 0 16px', whiteSpace: 'pre-wrap' }}>{question.problemStatement}</p>}
+        {question.problemStatementHtml ? (
+          <div className="lc-problem-html" style={{ fontSize: 14, lineHeight: 1.7, color: LC.text, margin: '0 0 16px' }} dangerouslySetInnerHTML={{ __html: question.problemStatementHtml }} />
+        ) : (
+          question.problemStatement && <p style={{ fontSize: 14, lineHeight: 1.7, color: LC.text, margin: '0 0 16px', whiteSpace: 'pre-wrap' }}>{question.problemStatement}</p>
+        )}
         {question.examples?.map((ex, i) => (
           <div key={i} style={{ marginBottom: 12 }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: LC.text, margin: '0 0 6px' }}>Example {i + 1}:</p>
@@ -1369,7 +1389,10 @@ const TestCasesPanel = ({ testCases, activeIdx, onSelect }) => {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div><label style={{ fontSize: 12, color: LC.textDim, display: 'block', marginBottom: 4 }}>Input</label><pre style={ioBoxStyle}>{tc.input}</pre></div>
-        <div><label style={{ fontSize: 12, color: LC.textDim, display: 'block', marginBottom: 4 }}>Expected Output</label><pre style={ioBoxStyle}>{tc.expectedOutput}</pre></div>
+        <div>
+          <label style={{ fontSize: 12, color: LC.textDim, display: 'block', marginBottom: 4 }}>Expected Output {!tc.expectedOutput && <span style={{ color: LC.textMute, fontSize: 10 }}>(unverified)</span>}</label>
+          <pre style={{ ...ioBoxStyle, color: tc.expectedOutput ? LC.text : LC.textMute }}>{tc.expectedOutput || 'N/A — output will be shown after Run'}</pre>
+        </div>
       </div>
     </div>
   );
@@ -1458,6 +1481,45 @@ const globalCss = `
   .lc-editor-root button:hover { opacity: 0.92; }
   .lc-editor-root .lc-lang-tab:hover { background: ${LC.hover}; }
   .lc-editor-root .lc-icon-btn:hover { background: ${LC.hover}; color: ${LC.text}; }
+  /* ── LeetCode HTML description styling ── */
+  .lc-problem-html { color: ${LC.text}; }
+  .lc-problem-html p { margin: 0 0 12px; line-height: 1.7; }
+  .lc-problem-html strong, .lc-problem-html b { color: #fff; font-weight: 600; }
+  .lc-problem-html em, .lc-problem-html i { color: ${LC.textDim}; }
+  .lc-problem-html code {
+    background: ${LC.panelAlt}; color: ${LC.accent};
+    padding: 1px 5px; border-radius: 3px;
+    font-family: 'JetBrains Mono', 'Menlo', monospace; font-size: 0.9em;
+  }
+  .lc-problem-html pre {
+    background: ${LC.panelAlt}; border: 1px solid ${LC.border};
+    border-radius: 6px; padding: 10px 12px;
+    color: ${LC.text}; font-family: 'JetBrains Mono', 'Menlo', monospace;
+    font-size: 13px; line-height: 1.6; margin: 8px 0; white-space: pre-wrap;
+    overflow-x: auto;
+  }
+  .lc-problem-html pre code {
+    background: transparent; color: ${LC.text}; padding: 0; border: none;
+  }
+  .lc-problem-html ul, .lc-problem-html ol { margin: 8px 0; padding-left: 20px; }
+  .lc-problem-html li { margin: 4px 0; line-height: 1.7; color: ${LC.text}; }
+  .lc-problem-html img { max-width: 100%; border-radius: 6px; margin: 8px 0; }
+  .lc-problem-html sup { font-size: 0.7em; vertical-align: super; color: ${LC.textDim}; }
+  .lc-problem-html sub { font-size: 0.7em; vertical-align: sub; color: ${LC.textDim}; }
+  .lc-problem-html a { color: ${LC.accent}; text-decoration: none; }
+  .lc-problem-html a:hover { text-decoration: underline; }
+  .lc-problem-html table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+  .lc-problem-html th, .lc-problem-html td {
+    border: 1px solid ${LC.border}; padding: 6px 10px;
+    color: ${LC.text}; text-align: left;
+  }
+  .lc-problem-html th { background: ${LC.panelAlt}; font-weight: 600; }
+  .lc-problem-html .example { color: ${LC.accent}; font-weight: 600; }
+  .lc-problem-html blockquote {
+    border-left: 3px solid ${LC.accent}; padding-left: 12px;
+    margin: 8px 0; color: ${LC.textDim};
+  }
+  .lc-problem-html .force-bold { color: #fff; font-weight: 600; }
 `;
 
 export default LeetCodeCodeEditor;
