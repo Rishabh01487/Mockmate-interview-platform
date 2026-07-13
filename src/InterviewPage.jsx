@@ -8,6 +8,7 @@ import './components/AnalyticsDashboard.css';
 import './components/components.css';
 import { generateQuestions, isAiOnline } from './services/aiService';
 import { API_BASE } from './config/api.js';
+import { fetchQuestionContent, generateStarterCode } from './services/leetcodeService.js';
 
 // Difficulty-based point values (must match backend)
 const DIFF_POINTS = { easy: 5, medium: 10, hard: 20 };
@@ -634,13 +635,14 @@ const InterviewPage = ({ onGoHome }) => {
               difficulty: q.difficulty,
               tags: q.topicTags?.map(t => t.name) || [],
               timeLimit: 1800,
-              problemStatement: `<h3>${q.title}</h3><p>Solve this problem on LeetCode or implement your solution here.</p><p>Title Slug: <code>${q.titleSlug}</code></p>`,
-              starterCode: {
-                javascript: `function ${(q.title||'').replace(/[^a-zA-Z0-9]/g,'')}() {\n  \n}`,
-                cpp: `class Solution {\npublic:\n  \n};`,
-                python: `def ${(q.title||'').replace(/[^a-zA-Z0-9]/g,'').replace(/^([^a-z])/,(_,c)=>c.toLowerCase())}():\n  pass`,
-                java: `class Solution {\n  public void ${(q.title||'').replace(/[^a-zA-Z0-9]/g,'').replace(/^./,c=>c.toLowerCase())}() {\n  }\n}`
-              }
+              // Placeholder — will be enriched with full content when the question is shown
+              problemStatement: `Loading full problem description...`,
+              examples: [],
+              constraints: [],
+              testCases: [],
+              starterCode: generateStarterCode(q.titleSlug, q.title),
+              // Flag so the editor knows to fetch full content on render
+              needsContentFetch: true,
             }));
           // Merge with local coding questions (avoid dupes by id)
           const localIds = new Set(localQs.map(q => q.id));
