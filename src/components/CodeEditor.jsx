@@ -745,15 +745,17 @@ int main() {
 
     if (type.includes('vector<vector')) {
       mainBody += `  string _l${i}; getline(cin, _l${i}); auto ${name} = _parse_2d_string_array(_l${i});\n`;
+    } else if (isLinkedList && (type.includes('ListNode') || type.includes('List'))) {
+      // Linked list parameter: parse input as int array, then convert to ListNode*
+      mainBody += `  string _l${i}; getline(cin, _l${i}); auto _arr${i} = _parse_int_array(_l${i});\n`;
+      mainBody += `  ListNode* ${name} = _array_to_list(_arr${i});\n`;
+    } else if (isTree && (type.includes('TreeNode') || type.includes('Tree'))) {
+      // Tree parameter: parse input as int array, then convert to TreeNode*
+      mainBody += `  string _l${i}; getline(cin, _l${i}); auto _arr${i} = _parse_int_array(_l${i});\n`;
+      mainBody += `  TreeNode* ${name} = _array_to_tree(_arr${i});\n`;
     } else if (type.includes('vector<int>')) {
       mainBody += `  string _l${i}; getline(cin, _l${i}); auto _arr${i} = _parse_int_array(_l${i});\n`;
-      if (isLinkedList) {
-        mainBody += `  ListNode* ${name} = _array_to_list(_arr${i});\n`;
-      } else if (isTree) {
-        mainBody += `  TreeNode* ${name} = _array_to_tree(_arr${i});\n`;
-      } else {
-        mainBody += `  vector<int> ${name} = _arr${i};\n`;
-      }
+      mainBody += `  vector<int> ${name} = _arr${i};\n`;
     } else if (type.includes('string')) {
       mainBody += `  string ${name}; getline(cin, ${name});\n`;
     } else {
