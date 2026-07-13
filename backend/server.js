@@ -750,6 +750,47 @@ app.post('/api/judge/test-suites', (req, res) => {
   res.json({ ok: true, count: testCases.length });
 });
 
+// LeetCode proxy: LeetCode's GraphQL API blocks browser CORS, so we proxy
+// it through the backend. Returns official code templates for all 4 languages.
+app.get('/api/leetcode/code/:titleSlug', async (req, res) => {
+  const { titleSlug } = req.params;
+  if (!titleSlug) return res.status(400).json({ error: 'titleSlug required' });
+  try {
+    const lcRes = await fetch('https://leetcode.com/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': 'https://leetcode.com',
+        'Referer': 'https://leetcode.com',
+      },
+      body: JSON.stringify({
+        query: `query questionData($titleSlug: String!) {
+          question(titleSlug: $titleSlug) {
+            questionId
+            title
+            codeSnippets { lang langSlug code }
+          }
+        }`,
+        variables: { titleSlug },
+      }),
+    });
+    const data = await lcRes.json();
+    const snippets = data?.data?.question?.codeSnippets || [];
+    const result = {};
+    for (const snip of snippets) {
+      const slug = snip.langSlug;
+      if (slug === 'javascript' && !result.javascript) result.javascript = snip.code;
+      else if ((slug === 'python3' || slug === 'python') && !result.python) result.python = snip.code;
+      else if (slug === 'java' && !result.java) result.java = snip.code;
+      else if (slug === 'cpp' && !result.cpp) result.cpp = snip.code;
+    }
+    res.json({ titleSlug, title: data?.data?.question?.title, starterCode: result });
+  } catch (err) {
+    console.error('[LeetCode proxy] Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch from LeetCode', details: err.message });
+  }
+});
+
 app.get('/api/judge/test-suites/:questionId', (req, res) => {
   const cases = testSuites[req.params.questionId] || [];
   res.json(cases);

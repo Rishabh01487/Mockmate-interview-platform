@@ -29,6 +29,7 @@
 
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
+import { API_BASE } from '../config/api.js';
 
 // ── Language metadata ────────────────────────────────────────────────────────
 const LANGUAGES = [
@@ -864,9 +865,10 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
   const editorRef = useRef(null);
 
   // If this is a live LeetCode question, fetch the FULL content (statement,
-  // examples, constraints, test cases) from the LeetCode API on mount.
-  // The list API only returns title/difficulty/tags — the full description
-  // requires a separate /select?titleSlug= call.
+  // examples, constraints, test cases) AND the official code templates from
+  // LeetCode's GraphQL API. The alfa API only returns the description; the
+  // official API returns the exact starter code for every language with the
+  // correct function signature, parameter names, and return types.
   useEffect(() => {
     if (!question.needsContentFetch || !question.titleSlug) {
       setEnrichedQuestion(question);
@@ -876,17 +878,38 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
     setContentLoading(true);
     (async () => {
       try {
-        const res = await fetch(`https://alfa-leetcode-api.onrender.com/select?titleSlug=${encodeURIComponent(question.titleSlug)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        // Fetch description/examples/constraints from alfa API
+        const descRes = await fetch(`https://alfa-leetcode-api.onrender.com/select?titleSlug=${encodeURIComponent(question.titleSlug)}`);
+
+        // Fetch official code templates via backend proxy (LeetCode blocks browser CORS)
+        let codeRes = null;
+        try {
+          codeRes = await fetch(`${API_BASE}/api/leetcode/code/${encodeURIComponent(question.titleSlug)}`);
+        } catch (proxyErr) {
+          console.warn('[CodeEditor] Backend proxy unavailable, falling back to generic starter code');
+        }
+
+        const data = await descRes.json();
         if (cancelled) return;
 
-        // Parse the HTML content
+        // Parse code snippets from backend proxy response
+        let starterCode = question.starterCode || {};
+        if (codeRes && codeRes.ok) {
+          try {
+            const codeData = await codeRes.json();
+            if (codeData?.starterCode) {
+              starterCode = { ...starterCode, ...codeData.starterCode };
+            }
+          } catch (codeErr) {
+            console.warn('[CodeEditor] Failed to parse code templates:', codeErr.message);
+          }
+        }
+
+        // Parse the HTML content for description/examples/constraints
         const html = data.question || '';
         const parser = new DOMParser();
         const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
 
-        // Extract examples from <pre> blocks
         const examples = [];
         doc.querySelectorAll('pre').forEach(pre => {
           const text = pre.textContent.trim();
@@ -902,7 +925,6 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
           }
         });
 
-        // Extract constraints from <ul><li> blocks
         const constraints = [];
         doc.querySelectorAll('ul').forEach(ul => {
           ul.querySelectorAll('li').forEach(li => {
@@ -911,7 +933,6 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
           });
         });
 
-        // Build clean text statement (everything before "Example 1:")
         const fullText = doc.body.textContent.replace(/\s+/g, ' ').trim();
         let statement = fullText;
         const exIdx = fullText.indexOf('Example 1:');
@@ -919,10 +940,30 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
         if (exIdx > 0) statement = fullText.substring(0, exIdx).trim();
         else if (conIdx > 0) statement = fullText.substring(0, conIdx).trim();
 
-        // Parse example testcases
         const testcaseStr = data.exampleTestcases || '';
+        // LeetCode's exampleTestcases has one input value per line.
+        // We need to figure out how many lines per test case based on the
+        // function signature (number of parameters). If we don't know, default to 1.
         const tcLines = testcaseStr.split('\n').map(l => l.trim()).filter(Boolean);
-        const testCases = tcLines.length > 0 ? [{ input: tcLines.join('\n'), expectedOutput: '' }] : [];
+        // Determine param count from the starter code signature
+        let paramCount = 1;
+        const jsCode = starterCode.javascript || '';
+        const sigMatch = jsCode.match(/function\s*\w*\s*\(([^)]*)\)/) || jsCode.match(/var\s+\w+\s*=\s*function\s*\(([^)]*)\)/);
+        if (sigMatch && sigMatch[1]) {
+          paramCount = sigMatch[1].split(',').map(p => p.trim()).filter(Boolean).length || 1;
+        }
+        // Group lines into test cases, each with `paramCount` lines
+        const testCases = [];
+        for (let i = 0; i < tcLines.length; i += paramCount) {
+          const chunk = tcLines.slice(i, i + paramCount);
+          if (chunk.length === paramCount) {
+            testCases.push({ input: chunk.join('\n'), expectedOutput: '' });
+          }
+        }
+        // Fallback: if we couldn't group, use all lines as one test case
+        if (testCases.length === 0 && tcLines.length > 0) {
+          testCases.push({ input: tcLines.join('\n'), expectedOutput: '' });
+        }
 
         if (!cancelled) {
           setEnrichedQuestion({
@@ -931,8 +972,13 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
             examples,
             constraints,
             testCases,
+            starterCode,
             needsContentFetch: false,
           });
+          // Update the code in the editor for the current language
+          if (starterCode[language]) {
+            setCodeByLang(prev => ({ ...prev, [language]: starterCode[language] }));
+          }
           setContentLoading(false);
         }
       } catch (err) {
