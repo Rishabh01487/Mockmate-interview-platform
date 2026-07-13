@@ -12,7 +12,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
   const stored = getStoredAuth();
   if (stored) {
-    // Verify token with backend; if invalid, clear auth
+    // Verify token with backend; if invalid, clear auth.
+    // If the network itself fails (CORS, sleeping server, offline),
+    // keep the stored session so the user can still use the app.
     fetch(`${API_BASE}/api/auth/profile`, {
       headers: { Authorization: `Bearer ${stored.token}` },
     })
@@ -25,7 +27,12 @@ export function AuthProvider({ children }) {
           clearAuth();
         }
       })
-      .catch(() => clearAuth());
+      .catch(() => {
+        // Network error — keep the stored session as a fallback so the
+        // user isn't logged out just because the backend is unreachable.
+        setToken(stored.token);
+        setUser(stored.user);
+      });
   }
   setReady(true);
 }, []);
