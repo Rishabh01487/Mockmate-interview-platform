@@ -354,7 +354,6 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
               .map((q, idx) => {
                 const words = q.title.match(/[a-zA-Z0-9]+/g) || ['solution'];
                 const camelCase = words.map((w, i) => i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
-                const snakeCase = words.map(w => w.toLowerCase()).join('_');
 
                 return {
                   id: `lc-live-${q.questionFrontendId || idx}`,
@@ -365,13 +364,19 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
                   category: 'LeetCode Central',
                   tags: q.topicTags?.map(t => t.name) || [],
                   timeLimit: 1800,
-                  problemStatement: `Implement the solution for: **${q.title}**\n\n*(Full description is usually available on LeetCode. Please instruct the candidate on exact constraints).*`,
+                  // Placeholder — CodeEditor will fetch full content via /select?titleSlug=
+                  problemStatement: 'Loading full problem description...',
+                  examples: [],
+                  constraints: [],
+                  testCases: [],
+                  // LeetCode-accurate starter code with proper Solution class pattern
                   starterCode: {
-                    javascript: `function ${camelCase}() {\n  // Your code here\n}`,
-                    python: `import math\nimport collections\n\ndef ${snakeCase}():\n  pass`,
-                    java: `import java.util.*;\n\nclass Solution {\n  public void ${camelCase}() {\n  }\n}`,
-                    cpp: `#include <bits/stdc++.h>\nusing namespace std;\n\nclass Solution {\npublic:\n  void ${camelCase}() {\n  }\n};`
-                  }
+                    javascript: `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar ${camelCase} = function(nums, target) {\n    \n};`,
+                    python: `class Solution:\n    def ${camelCase}(self, nums: List[int], target: int) -> List[int]:\n        pass`,
+                    java: `class Solution {\n    public int[] ${camelCase}(int[] nums, int target) {\n        \n    }\n}`,
+                    cpp: `class Solution {\npublic:\n    vector<int> ${camelCase}(vector<int>& nums, int target) {\n        \n    }\n};`
+                  },
+                  needsContentFetch: true,
                 };
               });
             setLcPool(mapped);

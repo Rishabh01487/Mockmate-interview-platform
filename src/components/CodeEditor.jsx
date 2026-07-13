@@ -27,7 +27,7 @@
  * Keyboard: Ctrl/Cmd+Enter = Run, Ctrl/Cmd+Shift+Enter = Submit
  */
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 
 // ── Language metadata ────────────────────────────────────────────────────────
@@ -859,15 +859,107 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
   const [finalResult, setFinalResult] = useState(null);
   const [fontSize, setFontSize] = useState(14);
   const [prevQuestionId, setPrevQuestionId] = useState(question.id);
+  const [enrichedQuestion, setEnrichedQuestion] = useState(question);
+  const [contentLoading, setContentLoading] = useState(false);
   const editorRef = useRef(null);
 
+  // If this is a live LeetCode question, fetch the FULL content (statement,
+  // examples, constraints, test cases) from the LeetCode API on mount.
+  // The list API only returns title/difficulty/tags — the full description
+  // requires a separate /select?titleSlug= call.
+  useEffect(() => {
+    if (!question.needsContentFetch || !question.titleSlug) {
+      setEnrichedQuestion(question);
+      return;
+    }
+    let cancelled = false;
+    setContentLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`https://alfa-leetcode-api.onrender.com/select?titleSlug=${encodeURIComponent(question.titleSlug)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        // Parse the HTML content
+        const html = data.question || '';
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+
+        // Extract examples from <pre> blocks
+        const examples = [];
+        doc.querySelectorAll('pre').forEach(pre => {
+          const text = pre.textContent.trim();
+          const inputMatch = text.match(/Input:\s*([^\n]+)/);
+          const outputMatch = text.match(/Output:\s*([^\n]+)/);
+          const explanationMatch = text.match(/Explanation:\s*([\s\S]+?)(?=\n\n|$)/);
+          if (inputMatch || outputMatch) {
+            examples.push({
+              input: inputMatch ? inputMatch[1].trim() : '',
+              output: outputMatch ? outputMatch[1].trim() : '',
+              explanation: explanationMatch ? explanationMatch[1].trim() : '',
+            });
+          }
+        });
+
+        // Extract constraints from <ul><li> blocks
+        const constraints = [];
+        doc.querySelectorAll('ul').forEach(ul => {
+          ul.querySelectorAll('li').forEach(li => {
+            const text = li.textContent.trim();
+            if (text && text.length < 300) constraints.push(text);
+          });
+        });
+
+        // Build clean text statement (everything before "Example 1:")
+        const fullText = doc.body.textContent.replace(/\s+/g, ' ').trim();
+        let statement = fullText;
+        const exIdx = fullText.indexOf('Example 1:');
+        const conIdx = fullText.indexOf('Constraints:');
+        if (exIdx > 0) statement = fullText.substring(0, exIdx).trim();
+        else if (conIdx > 0) statement = fullText.substring(0, conIdx).trim();
+
+        // Parse example testcases
+        const testcaseStr = data.exampleTestcases || '';
+        const tcLines = testcaseStr.split('\n').map(l => l.trim()).filter(Boolean);
+        const testCases = tcLines.length > 0 ? [{ input: tcLines.join('\n'), expectedOutput: '' }] : [];
+
+        if (!cancelled) {
+          setEnrichedQuestion({
+            ...question,
+            problemStatement: statement,
+            examples,
+            constraints,
+            testCases,
+            needsContentFetch: false,
+          });
+          setContentLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[CodeEditor] Failed to fetch LeetCode content:', err.message);
+          setEnrichedQuestion({
+            ...question,
+            problemStatement: `Failed to load full problem description. Visit https://leetcode.com/problems/${question.titleSlug}/ for the complete problem.`,
+            needsContentFetch: false,
+          });
+          setContentLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [question.id, question.titleSlug, question.needsContentFetch]);
+
+  // Use enrichedQuestion throughout the component instead of question
+  const q = enrichedQuestion;
+
   const testCases = useMemo(() => {
-    if (question.testCases?.length) return question.testCases;
-    if (question.examples?.length) {
-      return question.examples.map(e => ({ input: e.input, expectedOutput: e.output }));
+    if (q.testCases?.length) return q.testCases;
+    if (q.examples?.length) {
+      return q.examples.map(e => ({ input: e.input, expectedOutput: e.output }));
     }
     return [];
-  }, [question]);
+  }, [q]);
 
   // Reset state when question changes
   if (prevQuestionId !== question.id) {
@@ -980,7 +1072,7 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
   };
 
   const code = codeByLang[language];
-  const diffColor = (question.difficulty || '').toLowerCase();
+  const diffColor = (q.difficulty || '').toLowerCase();
   const passedCount = runResult?.filter(r => r.passed).length ?? 0;
   const allPassed = runResult !== null && passedCount === testCases.length && testCases.length > 0;
   const isReadOnly = readOnly || submitted;
@@ -991,7 +1083,7 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Problem description */}
         <div style={{ width: '42%', minWidth: 360, maxWidth: 720, borderRight: `1px solid ${LC.border}`, background: LC.panel, overflowY: 'auto', padding: '20px 24px' }}>
-          <ProblemDescription question={question} diffColor={diffColor} />
+          <ProblemDescription question={q} diffColor={diffColor} contentLoading={contentLoading} />
         </div>
         {/* Editor + console */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: LC.bg }}>
@@ -1082,7 +1174,7 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
 };
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
-const ProblemDescription = ({ question, diffColor }) => (
+const ProblemDescription = ({ question, diffColor, contentLoading }) => (
   <div>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
       <h1 style={{ fontSize: 22, fontWeight: 600, color: LC.text, margin: 0, letterSpacing: -0.3 }}>{question.id}. {question.question}</h1>
@@ -1092,22 +1184,36 @@ const ProblemDescription = ({ question, diffColor }) => (
       {question.tags?.map(t => <span key={t} style={{ padding: '2px 8px', background: LC.panelAlt, color: LC.textDim, borderRadius: 4, fontSize: 11 }}>{t}</span>)}
       {question.timeLimit && <span style={{ marginLeft: 'auto', fontSize: 11, color: LC.textMute }}>⏱ {question.timeLimit}s</span>}
     </div>
-    {question.problemStatement && <p style={{ fontSize: 14, lineHeight: 1.7, color: LC.text, margin: '0 0 16px', whiteSpace: 'pre-wrap' }}>{question.problemStatement}</p>}
-    {question.examples?.map((ex, i) => (
-      <div key={i} style={{ marginBottom: 12 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: LC.text, margin: '0 0 6px' }}>Example {i + 1}:</p>
-        <pre style={{ background: LC.panelAlt, border: `1px solid ${LC.border}`, borderRadius: 6, padding: '10px 12px', fontSize: 13, color: LC.text, fontFamily: "'JetBrains Mono', 'Menlo', monospace", lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>
-          <span style={{ color: LC.textDim }}>Input:</span> {ex.input}{'\n'}<span style={{ color: LC.textDim }}>Output:</span> {ex.output}{ex.explanation && <>{'\n'}<span style={{ color: LC.textDim }}>Explanation:</span> {ex.explanation}</>}
-        </pre>
+    {contentLoading ? (
+      <div style={{ padding: '24px 0', textAlign: 'center', color: LC.textDim, fontSize: 13 }}>
+        <div style={{ display: 'inline-block', width: 20, height: 20, border: '2px solid ' + LC.border, borderTopColor: LC.accent, borderRadius: '50%', animation: 'lc-spin 0.8s linear infinite', marginBottom: 8 }} />
+        <div>Loading full problem from LeetCode…</div>
       </div>
-    ))}
-    {question.constraints?.length > 0 && (
-      <div>
-        <p style={{ fontSize: 14, fontWeight: 600, color: LC.text, margin: '0 0 6px' }}>Constraints:</p>
-        <ul style={{ margin: 0, paddingLeft: 18, color: LC.text }}>
-          {question.constraints.map((c, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.7, fontFamily: "'JetBrains Mono', 'Menlo', monospace" }}>{c}</li>)}
-        </ul>
-      </div>
+    ) : (
+      <>
+        {question.problemStatement && <p style={{ fontSize: 14, lineHeight: 1.7, color: LC.text, margin: '0 0 16px', whiteSpace: 'pre-wrap' }}>{question.problemStatement}</p>}
+        {question.examples?.map((ex, i) => (
+          <div key={i} style={{ marginBottom: 12 }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: LC.text, margin: '0 0 6px' }}>Example {i + 1}:</p>
+            <pre style={{ background: LC.panelAlt, border: `1px solid ${LC.border}`, borderRadius: 6, padding: '10px 12px', fontSize: 13, color: LC.text, fontFamily: "'JetBrains Mono', 'Menlo', monospace", lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>
+              <span style={{ color: LC.textDim }}>Input:</span> {ex.input}{'\n'}<span style={{ color: LC.textDim }}>Output:</span> {ex.output}{ex.explanation && <>{'\n'}<span style={{ color: LC.textDim }}>Explanation:</span> {ex.explanation}</>}
+            </pre>
+          </div>
+        ))}
+        {question.constraints?.length > 0 && (
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 600, color: LC.text, margin: '0 0 6px' }}>Constraints:</p>
+            <ul style={{ margin: 0, paddingLeft: 18, color: LC.text }}>
+              {question.constraints.map((c, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.7, fontFamily: "'JetBrains Mono', 'Menlo', monospace" }}>{c}</li>)}
+            </ul>
+          </div>
+        )}
+        {question.titleSlug && (
+          <p style={{ marginTop: 16, fontSize: 11, color: LC.textMute }}>
+            Source: <a href={`https://leetcode.com/problems/${question.titleSlug}/`} target="_blank" rel="noreferrer" style={{ color: LC.accent }}>leetcode.com/problems/{question.titleSlug}</a>
+          </p>
+        )}
+      </>
     )}
   </div>
 );
