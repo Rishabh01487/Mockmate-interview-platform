@@ -92,7 +92,7 @@ const Icon = ({ name, size = 18, className = '' }) => {
 };
 
 // ---- Navbar ----
-const Navbar = ({ onStartInterview, onOpenRoom }) => (
+const Navbar = ({ onStartInterview, onOpenRoom, user, onLogout }) => (
   <nav className="navbar" role="navigation" aria-label="Main navigation">
     <div className="nav-brand">
       <div className="nav-brand-icon">
@@ -106,9 +106,39 @@ const Navbar = ({ onStartInterview, onOpenRoom }) => (
       <li><button className="nav-link-btn" onClick={onOpenRoom}>Interview Room</button></li>
       <li><a href="#contact">Contact</a></li>
     </ul>
-    <button className="nav-cta" id="nav-start-btn" onClick={onStartInterview} aria-label="Start a mock interview">
-      Start Interview <Icon name="arrow" size={14} />
-    </button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {user && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-muted, #858585)' }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: 'var(--accent, #ffa116)', color: '#1a1a1a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 700, fontSize: '0.8rem',
+          }}>
+            {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+          </div>
+          <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {user.name || user.email?.split('@')[0]}
+          </span>
+        </div>
+      )}
+      {onLogout && (
+        <button
+          onClick={onLogout}
+          style={{
+            background: 'transparent', border: '1px solid var(--border-primary, #333)',
+            color: 'var(--text-muted, #858585)', padding: '6px 14px', borderRadius: 6,
+            cursor: 'pointer', fontSize: '0.82rem', fontWeight: 500,
+          }}
+          aria-label="Log out"
+        >
+          Log Out
+        </button>
+      )}
+      <button className="nav-cta" id="nav-start-btn" onClick={onStartInterview} aria-label="Start a mock interview">
+        Start Interview <Icon name="arrow" size={14} />
+      </button>
+    </div>
   </nav>
 );
 
@@ -428,14 +458,14 @@ const PastSessions = ({ isLoggedIn, onViewReport }) => {
 };
 
 // ---- HomePage (default export) ----
-const HomePage = ({ user, isLoggedIn, onStartInterview, onOpenRoom, onViewReport }) => (
+const HomePage = ({ user, isLoggedIn, onStartInterview, onOpenRoom, onViewReport, onLogout }) => (
   <div className="home-container">
     <div className="home-bg">
       <div className="home-orb home-orb-1" />
       <div className="home-orb home-orb-2" />
       <div className="home-orb home-orb-3" />
     </div>
-    <Navbar onStartInterview={onStartInterview} onOpenRoom={onOpenRoom} />
+    <Navbar onStartInterview={onStartInterview} onOpenRoom={onOpenRoom} user={user} onLogout={onLogout} />
     <Hero onStartInterview={onStartInterview} onOpenRoom={onOpenRoom} />
     <CategoriesStrip />
     <FeaturesSection />

@@ -5,6 +5,7 @@ import HomePage from './HomePage.jsx';
 import InterviewPage from './InterviewPage.jsx';
 import InterviewRoom from './InterviewRoom.jsx';
 import AnalyticsReport from './AnalyticsReport.jsx';
+import ChatBot from './ChatBot.jsx';
 import './App.css';
 
 /**
@@ -15,13 +16,8 @@ import './App.css';
  *                       → InterviewRoom (multi-candidate session)
  *                       → AnalyticsReport (past session review)
  *
- * The previous App.jsx was a standalone Two Sum demo with its own in-line
- * editor — it never imported any of the real Mockmate components, so the
- * deployed app showed a hardcoded demo instead of the actual platform.
- *
- * Auth is provided via AuthProvider (wraps the whole app in AuthContext),
- * which talks to the backend at API_BASE (Render in production, Vite proxy
- * in dev). The backend URL is configured in src/config/api.js.
+ * Verge1.o (the ChatBot AI assistant) is available as a floating widget
+ * on every page after login.
  */
 
 function AppShell() {
@@ -32,7 +28,7 @@ function AppShell() {
 
   // Wait for AuthContext to finish checking localStorage + verifying token
   if (!ready) {
-  return (
+    return (
       <div className="app-loading">
         <div className="app-loading-spinner" />
         <p>Loading Mockmate…</p>
@@ -45,37 +41,46 @@ function AppShell() {
     return <AuthPage onBack={() => setView('home')} />;
   }
 
-  // Route to the right view
-  switch (view) {
-    case 'interview':
-      return <InterviewPage onGoHome={() => setView('home')} />;
+  // Render the appropriate view + the floating ChatBot (Verge1.o)
+  const renderView = () => {
+    switch (view) {
+      case 'interview':
+        return <InterviewPage onGoHome={() => setView('home')} />;
 
-    case 'room':
-      return <InterviewRoom onGoHome={() => setView('home')} />;
+      case 'room':
+        return <InterviewRoom onGoHome={() => setView('home')} />;
 
-    case 'report':
-      return (
-        <AnalyticsReport
-          session={reportSession}
-          onBack={() => setView('home')}
-        />
-      );
+      case 'report':
+        return (
+          <AnalyticsReport
+            session={reportSession}
+            onBack={() => setView('home')}
+          />
+        );
 
-    default:
-      return (
-        <HomePage
-          user={user}
-          isLoggedIn={isLoggedIn}
-          onStartInterview={() => setView('interview')}
-          onOpenRoom={() => setView('room')}
-          onViewReport={(session) => {
-            setReportSession(session);
-            setView('report');
-          }}
-          onLogout={logout}
-        />
-      );
-  }
+      default:
+        return (
+          <HomePage
+            user={user}
+            isLoggedIn={isLoggedIn}
+            onStartInterview={() => setView('interview')}
+            onOpenRoom={() => setView('room')}
+            onViewReport={(session) => {
+              setReportSession(session);
+              setView('report');
+            }}
+            onLogout={logout}
+          />
+        );
+    }
+  };
+
+  return (
+    <>
+      {renderView()}
+      <ChatBot />
+    </>
+  );
 }
 
 export default function App() {
