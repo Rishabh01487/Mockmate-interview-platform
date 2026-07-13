@@ -30,6 +30,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { API_BASE } from '../config/api.js';
+import { getTestCasesFor } from '../data/leetcodeTestcases.js';
 
 // ── Language metadata ────────────────────────────────────────────────────────
 const LANGUAGES = [
@@ -1003,52 +1004,51 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
         if (exIdx > 0) statement = fullText.substring(0, exIdx).trim();
         else if (conIdx > 0) statement = fullText.substring(0, conIdx).trim();
 
-        const testcaseStr = data.exampleTestcases || '';
-        // LeetCode's exampleTestcases has one input value per line.
-        // We need to figure out how many lines per test case based on the
-        // function signature (number of parameters). If we don't know, default to 1.
-        const tcLines = testcaseStr.split('\n').map(l => l.trim()).filter(Boolean);
-        // Determine param count from the starter code signature
-        let paramCount = 1;
-        const jsCode = starterCode.javascript || '';
-        const sigMatch = jsCode.match(/function\s*\w*\s*\(([^)]*)\)/) || jsCode.match(/var\s+\w+\s*=\s*function\s*\(([^)]*)\)/);
-        if (sigMatch && sigMatch[1]) {
-          paramCount = sigMatch[1].split(',').map(p => p.trim()).filter(Boolean).length || 1;
-        }
-        // Group lines into test cases, each with `paramCount` lines
-        const testCases = [];
-        for (let i = 0; i < tcLines.length; i += paramCount) {
-          const chunk = tcLines.slice(i, i + paramCount);
-          if (chunk.length === paramCount) {
-            testCases.push({ input: chunk.join('\n'), expectedOutput: '' });
-          }
-        }
-        // Fallback: if we couldn't group, use all lines as one test case
-        if (testCases.length === 0 && tcLines.length > 0) {
-          testCases.push({ input: tcLines.join('\n'), expectedOutput: '' });
-        }
+        // ── Test cases ──────────────────────────────────────────────────────
+        // Priority: curated database (with expected outputs) > example testcases
+        const curatedTestCases = getTestCasesFor(question.titleSlug);
+        let testCases;
 
-        // Match test cases to examples to fill in expected outputs.
-        // LeetCode examples have "Input: varname = value, varname2 = value2"
-        // while exampleTestcases has just "value\nvalue2". We strip the
-        // varname prefixes and compare the raw values.
-        if (examples.length > 0 && testCases.length > 0) {
-          for (const tc of testCases) {
-            const tcValues = tc.input.split('\n').map(v => v.trim());
-            for (const ex of examples) {
-              // Parse example input: "height = [0,1,0,2,...]" → ["[0,1,0,2,...]"]
-              // or "nums = [2,7,11,15], target = 9" → ["[2,7,11,15]", "9"]
-              const exInputStr = ex.input || '';
-              // Extract values after "= " for each parameter (split by ", varname = ")
-              const valueMatches = exInputStr.match(/=\s*([^,=]+(?:\[[^\]]*\])?)/g);
-              if (valueMatches) {
-                const exValues = valueMatches.map(v => v.replace(/^=\s*/, '').trim());
-                // Compare — the test case values should match the example values
-                const matches = exValues.length === tcValues.length &&
-                  exValues.every((ev, i) => normalize(ev) === normalize(tcValues[i]));
-                if (matches) {
-                  tc.expectedOutput = (ex.output || '').trim();
-                  break;
+        if (curatedTestCases && curatedTestCases.length > 0) {
+          // Use curated test cases — these have expected outputs and verify
+          // the solution like a real judge
+          testCases = curatedTestCases;
+        } else {
+          // Fall back to example testcases from the problem description
+          const testcaseStr = data.exampleTestcases || '';
+          const tcLines = testcaseStr.split('\n').map(l => l.trim()).filter(Boolean);
+          let paramCount = 1;
+          const jsCode = starterCode.javascript || '';
+          const sigMatch = jsCode.match(/function\s*\w*\s*\(([^)]*)\)/) || jsCode.match(/var\s+\w+\s*=\s*function\s*\(([^)]*)\)/);
+          if (sigMatch && sigMatch[1]) {
+            paramCount = sigMatch[1].split(',').map(p => p.trim()).filter(Boolean).length || 1;
+          }
+          testCases = [];
+          for (let i = 0; i < tcLines.length; i += paramCount) {
+            const chunk = tcLines.slice(i, i + paramCount);
+            if (chunk.length === paramCount) {
+              testCases.push({ input: chunk.join('\n'), expectedOutput: '' });
+            }
+          }
+          if (testCases.length === 0 && tcLines.length > 0) {
+            testCases.push({ input: tcLines.join('\n'), expectedOutput: '' });
+          }
+
+          // Match test cases to examples to fill in expected outputs
+          if (examples.length > 0 && testCases.length > 0) {
+            for (const tc of testCases) {
+              const tcValues = tc.input.split('\n').map(v => v.trim());
+              for (const ex of examples) {
+                const exInputStr = ex.input || '';
+                const valueMatches = exInputStr.match(/=\s*([^,=]+(?:\[[^\]]*\])?)/g);
+                if (valueMatches) {
+                  const exValues = valueMatches.map(v => v.replace(/^=\s*/, '').trim());
+                  const matches = exValues.length === tcValues.length &&
+                    exValues.every((ev, i) => normalize(ev) === normalize(tcValues[i]));
+                  if (matches) {
+                    tc.expectedOutput = (ex.output || '').trim();
+                    break;
+                  }
                 }
               }
             }
