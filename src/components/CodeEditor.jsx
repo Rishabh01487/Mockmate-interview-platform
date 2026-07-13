@@ -1028,6 +1028,33 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
           testCases.push({ input: tcLines.join('\n'), expectedOutput: '' });
         }
 
+        // Match test cases to examples to fill in expected outputs.
+        // LeetCode examples have "Input: varname = value, varname2 = value2"
+        // while exampleTestcases has just "value\nvalue2". We strip the
+        // varname prefixes and compare the raw values.
+        if (examples.length > 0 && testCases.length > 0) {
+          for (const tc of testCases) {
+            const tcValues = tc.input.split('\n').map(v => v.trim());
+            for (const ex of examples) {
+              // Parse example input: "height = [0,1,0,2,...]" → ["[0,1,0,2,...]"]
+              // or "nums = [2,7,11,15], target = 9" → ["[2,7,11,15]", "9"]
+              const exInputStr = ex.input || '';
+              // Extract values after "= " for each parameter (split by ", varname = ")
+              const valueMatches = exInputStr.match(/=\s*([^,=]+(?:\[[^\]]*\])?)/g);
+              if (valueMatches) {
+                const exValues = valueMatches.map(v => v.replace(/^=\s*/, '').trim());
+                // Compare — the test case values should match the example values
+                const matches = exValues.length === tcValues.length &&
+                  exValues.every((ev, i) => normalize(ev) === normalize(tcValues[i]));
+                if (matches) {
+                  tc.expectedOutput = (ex.output || '').trim();
+                  break;
+                }
+              }
+            }
+          }
+        }
+
         if (!cancelled) {
           setEnrichedQuestion({
             ...question,
@@ -1143,7 +1170,8 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
       setRunResult(raw.map((r, i) => ({
         ...r,
         expected: testCases[i]?.expectedOutput ?? '',
-        passed: !r.error && normalize(r.actual) === normalize(testCases[i]?.expectedOutput ?? ''),
+        passed: !r.error && (testCases[i]?.expectedOutput ? normalize(r.actual) === normalize(testCases[i].expectedOutput) : true),
+        noExpected: !testCases[i]?.expectedOutput,
       })));
       setRunning(false);
     } catch (err) {
@@ -1166,12 +1194,16 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
       const annotated = raw.map((r, i) => ({
         ...r,
         expected: testCases[i]?.expectedOutput ?? '',
-        passed: !r.error && normalize(r.actual) === normalize(testCases[i]?.expectedOutput ?? ''),
+        passed: !r.error && (testCases[i]?.expectedOutput ? normalize(r.actual) === normalize(testCases[i].expectedOutput) : true),
+        noExpected: !testCases[i]?.expectedOutput,
       }));
       const passed = annotated.filter(r => r.passed).length;
       const total = annotated.length;
+      const hasExpected = annotated.some(r => !r.noExpected);
       const score = total > 0 ? Math.round((passed / total) * 100) : 0;
-      const status = passed === total ? 'accepted' : passed === 0 ? 'error' : 'wrong';
+      // If no test cases have expected outputs, status is 'executed' (not 'accepted')
+      const status = !hasExpected ? (annotated.some(r => r.error) ? 'error' : 'executed')
+        : passed === total ? 'accepted' : passed === 0 ? 'error' : 'wrong';
       const result = { code, language, score, passed, total, details: annotated, status };
       setRunResult(annotated); setFinalResult(result);
       setSubmitted(true); setSubmitting(false); onSubmit?.(result);
@@ -1261,8 +1293,8 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
               )}
               {submitted && finalResult && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: finalResult.status === 'accepted' ? `${LC.accepted}22` : `${LC.wrong}22`, color: finalResult.status === 'accepted' ? LC.accepted : LC.wrong, border: `1px solid ${finalResult.status === 'accepted' ? LC.accepted : LC.wrong}` }}>
-                    {finalResult.status === 'accepted' ? '✓ Accepted' : finalResult.status === 'compile_error' ? 'Compile Error' : '✗ Wrong Answer'}
+                  <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: finalResult.status === 'accepted' ? `${LC.accepted}22` : finalResult.status === 'executed' ? `${LC.textDim}22` : `${LC.wrong}22`, color: finalResult.status === 'accepted' ? LC.accepted : finalResult.status === 'executed' ? LC.textDim : LC.wrong, border: `1px solid ${finalResult.status === 'accepted' ? LC.accepted : finalResult.status === 'executed' ? LC.textDim : LC.wrong}` }}>
+                    {finalResult.status === 'accepted' ? '✓ Accepted' : finalResult.status === 'executed' ? '● Executed' : finalResult.status === 'compile_error' ? 'Compile Error' : '✗ Wrong Answer'}
                   </span>
                   <span style={{ fontSize: 12, color: LC.textDim }}>Score: <b style={{ color: LC.text }}>{finalResult.score}</b>/100 · {finalResult.passed}/{finalResult.total} cases</span>
                 </div>
@@ -1353,17 +1385,21 @@ const ResultsPanel = ({ running, submitting, results, compileError, testCases, s
   );
   if (!results || results.length === 0) return <div style={{ color: LC.textDim, fontSize: 13 }}>Click <b style={{ color: LC.accent }}>Run</b> to test your code against the test cases. Click <b style={{ color: LC.accepted }}>Submit</b> to record your final score.</div>;
   const passed = results.filter(r => r.passed).length, total = results.length, allPassed = passed === total;
+  const hasExpected = results.some(r => !r.noExpected);
+  const isExecuted = !hasExpected && results.every(r => !r.error);
+  const summaryColor = isExecuted ? LC.textDim : allPassed ? LC.accepted : LC.wrong;
+  const summaryLabel = isExecuted ? 'Executed' : allPassed ? 'Accepted' : finalResult?.status === 'compile_error' ? 'Compile Error' : 'Wrong Answer';
   return (
     <div>
       {submitted && finalResult ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: allPassed ? `${LC.accepted}11` : `${LC.wrong}11`, border: `1px solid ${allPassed ? LC.accepted : LC.wrong}`, borderRadius: 6, marginBottom: 12 }}>
-          {allPassed ? <AcceptedCheckIcon /> : <WrongXIcon />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: isExecuted ? `${LC.textDim}11` : allPassed ? `${LC.accepted}11` : `${LC.wrong}11`, border: `1px solid ${isExecuted ? LC.textDim : allPassed ? LC.accepted : LC.wrong}`, borderRadius: 6, marginBottom: 12 }}>
+          {isExecuted ? <ExecCheckIcon /> : allPassed ? <AcceptedCheckIcon /> : <WrongXIcon />}
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: allPassed ? LC.accepted : LC.wrong }}>{allPassed ? 'Accepted' : finalResult.status === 'compile_error' ? 'Compile Error' : 'Wrong Answer'}</div>
-            <div style={{ fontSize: 12, color: LC.textDim, marginTop: 2 }}>{passed} / {total} test cases passed · Score: {finalResult.score}/100</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: summaryColor }}>{summaryLabel}</div>
+            <div style={{ fontSize: 12, color: LC.textDim, marginTop: 2 }}>{hasExpected ? `${passed} / ${total} test cases passed` : `${total} test cases executed`} · Score: {finalResult.score}/100</div>
           </div>
         </div>
-      ) : <div style={{ marginBottom: 12, fontSize: 13, color: LC.textDim }}>{passed} / {total} test cases passed</div>}
+      ) : <div style={{ marginBottom: 12, fontSize: 13, color: LC.textDim }}>{hasExpected ? `${passed} / ${total} test cases passed` : `${total} test cases executed`}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {results.map((r, i) => <TestCaseResultRow key={i} idx={i} result={r} expected={testCases[i]?.expectedOutput ?? ''} />)}
       </div>
@@ -1371,21 +1407,29 @@ const ResultsPanel = ({ running, submitting, results, compileError, testCases, s
   );
 };
 
-const TestCaseResultRow = ({ idx, result, expected }) => (
-  <div style={{ background: LC.panelAlt, border: `1px solid ${result.passed ? `${LC.accepted}55` : `${LC.wrong}55`}`, borderRadius: 6, overflow: 'hidden' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: result.passed ? `${LC.accepted}11` : `${LC.wrong}11`, borderBottom: `1px solid ${LC.border}` }}>
-      {result.passed ? <PassDot /> : <FailDot />}
-      <span style={{ fontSize: 13, fontWeight: 600, color: result.passed ? LC.accepted : LC.wrong }}>Case {idx + 1} {result.passed ? 'Accepted' : result.error ? 'Runtime Error' : 'Wrong Answer'}</span>
+const TestCaseResultRow = ({ idx, result, expected }) => {
+  const isExecuted = result.noExpected && !result.error;
+  const statusColor = result.passed && !result.noExpected ? LC.accepted : result.error ? LC.wrong : isExecuted ? LC.textDim : LC.wrong;
+  const statusBg = result.passed && !result.noExpected ? `${LC.accepted}11` : result.error ? `${LC.wrong}11` : isExecuted ? `${LC.textDim}11` : `${LC.wrong}11`;
+  const statusBorder = result.passed && !result.noExpected ? `${LC.accepted}55` : result.error ? `${LC.wrong}55` : isExecuted ? `${LC.textDim}55` : `${LC.wrong}55`;
+  const statusLabel = result.error ? 'Runtime Error' : isExecuted ? 'Executed' : result.passed ? 'Accepted' : 'Wrong Answer';
+  const dotColor = result.passed && !result.noExpected ? LC.accepted : result.error ? LC.wrong : isExecuted ? LC.textDim : LC.wrong;
+  return (
+  <div style={{ background: LC.panelAlt, border: `1px solid ${statusBorder}`, borderRadius: 6, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: statusBg, borderBottom: `1px solid ${LC.border}` }}>
+      {result.error ? <FailDot /> : isExecuted ? <ExecDot color={dotColor} /> : result.passed ? <PassDot /> : <FailDot />}
+      <span style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>Case {idx + 1} {statusLabel}</span>
       <span style={{ fontSize: 11, color: LC.textMute, marginLeft: 'auto' }}>{result.elapsedMs.toFixed(1)}ms</span>
     </div>
     <div style={{ padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, fontSize: 12 }}>
       <div><div style={{ color: LC.textDim, marginBottom: 4 }}>Input</div><pre style={{ ...miniPreStyle, color: LC.text }}>{result.input}</pre></div>
-      <div><div style={{ color: LC.textDim, marginBottom: 4 }}>Expected</div><pre style={{ ...miniPreStyle, color: LC.text }}>{expected}</pre></div>
-      <div><div style={{ color: LC.textDim, marginBottom: 4 }}>{result.error ? 'Error' : 'Output'}</div><pre style={{ ...miniPreStyle, color: result.passed ? LC.accepted : result.error ? LC.wrong : LC.text }}>{result.error ? result.error : result.actual}</pre></div>
+      <div><div style={{ color: LC.textDim, marginBottom: 4 }}>Expected</div><pre style={{ ...miniPreStyle, color: expected ? LC.text : LC.textMute }}>{expected || 'N/A (live LeetCode)'}</pre></div>
+      <div><div style={{ color: LC.textDim, marginBottom: 4 }}>{result.error ? 'Error' : 'Output'}</div><pre style={{ ...miniPreStyle, color: result.error ? LC.wrong : LC.text }}>{result.error ? result.error : result.actual}</pre></div>
     </div>
     {result.stdout.length > 0 && <div style={{ padding: '0 12px 10px', fontSize: 12 }}><div style={{ color: LC.textDim, marginBottom: 4 }}>stdout</div><pre style={{ ...miniPreStyle, color: LC.textDim }}>{result.stdout.join('\n')}</pre></div>}
   </div>
-);
+  );
+};
 
 // ── Inline style objects ─────────────────────────────────────────────────────
 const iconBtnStyle = { background: 'transparent', border: `1px solid ${LC.border}`, color: LC.textDim, padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 };
@@ -1400,7 +1444,9 @@ const PlayIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="cur
 const SubmitIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
 const PassDot = () => <svg width="14" height="14" viewBox="0 0 24 24" fill={LC.accepted}><circle cx="12" cy="12" r="10" /><polyline points="17 8 10 15 7 12" stroke="#1a1a1a" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const FailDot = () => <svg width="14" height="14" viewBox="0 0 24 24" fill={LC.wrong}><circle cx="12" cy="12" r="10" /><line x1="9" y1="9" x2="15" y2="15" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" /><line x1="15" y1="9" x2="9" y2="15" stroke="#1a1a1a" strokeWidth="2.5" strokeLinecap="round" /></svg>;
+const ExecDot = ({ color }) => <svg width="14" height="14" viewBox="0 0 24 24" fill={color || LC.textDim}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" fill="#1a1a1a" /></svg>;
 const AcceptedCheckIcon = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={LC.accepted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="9 12 11 14 15 10" /></svg>;
+const ExecCheckIcon = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={LC.textDim} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" fill={LC.textDim} stroke="none" /></svg>;
 const WrongXIcon = () => <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={LC.wrong} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="9" y1="9" x2="15" y2="15" /><line x1="15" y1="9" x2="9" y2="15" /></svg>;
 
 const globalCss = `
