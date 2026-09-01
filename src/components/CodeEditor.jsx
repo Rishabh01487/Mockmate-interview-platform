@@ -994,29 +994,59 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
         // Fetch description/examples/constraints from alfa API
         const descRes = await fetch(`https://alfa-leetcode-api.onrender.com/select?titleSlug=${encodeURIComponent(question.titleSlug)}`);
 
-        // Fetch official code templates via backend proxy (LeetCode blocks browser CORS)
-        let codeRes = null;
+        // Fetch official code templates. LeetCode blocks browser CORS, so try
+        // multiple approaches in order:
+        //   1. Backend proxy (best — deployed on Render)
+        //   2. Public CORS proxy (fallback — works but slower)
+        //   3. Generic defaultStarter (last resort — may not match LeetCode exactly)
+        let starterCode = question.starterCode || {};
+        let codeFetched = false;
+
+        // Attempt 1: Backend proxy
         try {
-          codeRes = await fetch(`${API_BASE}/api/leetcode/code/${encodeURIComponent(question.titleSlug)}`);
+          const codeRes = await fetch(`${API_BASE}/api/leetcode/code/${encodeURIComponent(question.titleSlug)}`);
+          if (codeRes.ok) {
+            const codeData = await codeRes.json();
+            if (codeData?.starterCode && Object.keys(codeData.starterCode).length > 0) {
+              starterCode = { ...starterCode, ...codeData.starterCode };
+              codeFetched = true;
+            }
+          }
         } catch (proxyErr) {
-          console.warn('[CodeEditor] Backend proxy unavailable, falling back to generic starter code');
+          console.warn('[CodeEditor] Backend proxy unavailable, trying CORS proxy');
+        }
+
+        // Attempt 2: Public CORS proxy (allorigins.win)
+        if (!codeFetched) {
+          try {
+            const graphqlBody = JSON.stringify({
+              query: `query questionData($titleSlug: String!) { question(titleSlug: $titleSlug) { codeSnippets { lang langSlug code } } }`,
+              variables: { titleSlug: question.titleSlug },
+            });
+            const corsRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://leetcode.com/graphql')}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: graphqlBody,
+            });
+            if (corsRes.ok) {
+              const corsData = await corsRes.json();
+              const snippets = corsData?.data?.question?.codeSnippets || [];
+              const langMap = { javascript: 'javascript', python3: 'python', python: 'python', java: 'java', cpp: 'cpp' };
+              for (const snip of snippets) {
+                const ourLang = langMap[snip.langSlug];
+                if (ourLang && !starterCode[ourLang]) {
+                  starterCode[ourLang] = snip.code;
+                  codeFetched = true;
+                }
+              }
+            }
+          } catch (corsErr) {
+            console.warn('[CodeEditor] CORS proxy failed, using generic starter code');
+          }
         }
 
         const data = await descRes.json();
         if (cancelled) return;
-
-        // Parse code snippets from backend proxy response
-        let starterCode = question.starterCode || {};
-        if (codeRes && codeRes.ok) {
-          try {
-            const codeData = await codeRes.json();
-            if (codeData?.starterCode) {
-              starterCode = { ...starterCode, ...codeData.starterCode };
-            }
-          } catch (codeErr) {
-            console.warn('[CodeEditor] Failed to parse code templates:', codeErr.message);
-          }
-        }
 
         // Parse the HTML content for description/examples/constraints
         const html = data.question || '';
