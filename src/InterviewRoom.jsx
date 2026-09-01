@@ -318,6 +318,7 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
   const [questionTypeFilter, setQuestionTypeFilter] = useState('all');
   const [lcPool, setLcPool] = useState([]);
   const [fetchingLc, setFetchingLc] = useState(false);
+  const [lcError, setLcError] = useState('');
 
   const [lcSearchQuery, setLcSearchQuery] = useState('');
 
@@ -342,13 +343,18 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
     setAiGenerating(false);
   };
 
-  useEffect(() => {
-    if (selectedCat === 'leetcode-live' && lcPool.length === 0) {
-      setFetchingLc(true);
-      fetch('https://alfa-leetcode-api.onrender.com/problems?limit=4000')
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.problemsetQuestionList) {
+  const fetchLeetCodeProblems = useCallback(async () => {
+    setFetchingLc(true);
+    setLcError('');
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch('https://alfa-leetcode-api.onrender.com/problems?limit=4000', { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || !data.problemsetQuestionList) throw new Error('Invalid response');
+      {
             const mapped = data.problemsetQuestionList
               .filter(q => !q.isPaidOnly)
               .map((q, idx) => {
@@ -380,12 +386,20 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
                 };
               });
             setLcPool(mapped);
-          }
-        })
-        .catch(err => console.error('Failed to fetch LC data:', err))
-        .finally(() => setFetchingLc(false));
+      }
+    } catch (err) {
+      console.error('Failed to fetch LC data:', err);
+      setLcError(err.name === 'AbortError' ? 'Request timed out — LeetCode API may be sleeping. Click retry.' : err.message);
+    } finally {
+      setFetchingLc(false);
     }
-  }, [selectedCat, lcPool.length]);
+  }, []);
+
+  useEffect(() => {
+    if (selectedCat === 'leetcode-live' && lcPool.length === 0 && !fetchingLc && !lcError) {
+      fetchLeetCodeProblems();
+    }
+  }, [selectedCat, lcPool.length, fetchingLc, lcError, fetchLeetCodeProblems]);
 
   const availableQs = selectedCat === 'leetcode-live' 
     ? (lcSearchQuery ? lcPool.filter(q => q.question.toLowerCase().includes(lcSearchQuery.toLowerCase())) : lcPool)
@@ -582,9 +596,15 @@ const CreateRoom = ({ onRoomCreated, onBack }) => {
           )}
 
           <div className="room-q-pool">
-            {fetchingLc && <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem', padding: '1rem' }}>Downloading 3,500+ LeetCode problems...</div>}
-            {!fetchingLc && selectedCat === 'leetcode-live' && availableQs.length === 0 && <div style={{ padding: '1rem', color: 'var(--text-dim)' }}>No problems matched your search.</div>}
-            {!fetchingLc && filteredQs.map(q => {
+            {fetchingLc && <div style={{ color: 'var(--text-dim)', fontSize: '0.9rem', padding: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}><span className="room-spinner" /> Downloading 3,500+ LeetCode problems... (this can take 10-15s)</div>}
+            {lcError && !fetchingLc && (
+              <div style={{ padding: '1rem', color: 'var(--warning, #f0a830)' }}>
+                <div style={{ marginBottom: '8px' }}>⚠ Failed to load LeetCode problems: {lcError}</div>
+                <button onClick={() => fetchLeetCodeProblems()} style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid var(--border-primary)', background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '0.85rem' }}>↻ Retry</button>
+              </div>
+            )}
+            {!fetchingLc && !lcError && selectedCat === 'leetcode-live' && availableQs.length === 0 && <div style={{ padding: '1rem', color: 'var(--text-dim)' }}>No problems matched your search.</div>}
+            {!fetchingLc && !lcError && filteredQs.map(q => {
               const isSelected = selectedQs.find(x => x.id === q.id);
               return (
                 <button key={q.id} className={`room-q-item${isSelected ? ' room-q-item--selected' : ''}`}
