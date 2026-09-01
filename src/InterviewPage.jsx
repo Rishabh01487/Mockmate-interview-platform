@@ -673,7 +673,8 @@ const InterviewPage = ({ onGoHome }) => {
         const online = await isAiOnline();
         if (!online) throw new Error('AI backend is offline');
         const generateCount = useAI ? questionCount : needed;
-        const batchSize = 10;
+        // Generate all questions in one batch — Qwen 3.8 Flash handles 40+ fine
+        const batchSize = Math.min(generateCount, 50);
         const batches = Math.ceil(generateCount / batchSize);
         let aiQs = [];
         for (let i = 0; i < batches; i++) {
