@@ -837,7 +837,7 @@ app.post('/api/leetcode-graphql', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 const AI_BASE_URL = (process.env.AI_API_URL || 'https://openrouter.ai/api/v1').trim().replace(/\/$/, '');
 const AI_KEY = (process.env.AI_API_KEY || '').trim();
-const AI_MODEL = (process.env.AI_MODEL || 'moonshotai/kimi-k2').trim();
+const AI_MODEL = (process.env.AI_MODEL || 'minimax/minimax-m3:free').trim();
 
 console.log(`✓ AI Provider → ${AI_BASE_URL} (model: ${AI_MODEL})`);
 
@@ -865,20 +865,45 @@ app.post('/api/ai/chat', async (req, res) => {
   try {
     const { messages, model, temperature = 0.7 } = req.body;
     const useModel = model || AI_MODEL;
-    let response, aiContent = '';
+    // Fallback models to try if the primary is rate-limited or unavailable
+    const fallbackModels = [
+      useModel,
+      'minimax/minimax-m3:free',
+      'inclusionai/ling-3.0-flash-fin:free',
+      'liquid/lfm-2.5-2.6b:free',
+      'thinkingmachines/inkling-small:free',
+    ].filter((v, i, a) => a.indexOf(v) === i);
 
-    console.log(`[AI Chat] → model=${useModel}, msgs=${messages?.length}`);
-    response = await fetch(`${AI_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}`, 'HTTP-Referer': 'https://mockmate-mu-one.vercel.app', 'X-Title': 'MockMate' },
-      body: JSON.stringify({ model: useModel, messages, temperature, max_tokens: 4096, stream: false }),
-      signal: AbortSignal.timeout(120000)
-    });
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error(`[AI Chat] error ${response.status}: ${errBody.slice(0, 500)}`);
-      return res.status(response.status).json({ error: errBody });
+    let response, aiContent = '', lastError = '', modelUsed = useModel;
+
+    for (const m of fallbackModels) {
+      console.log(`[AI Chat] \xe2\x86\x92 model=${m}, msgs=${messages?.length}`);
+      try {
+        response = await fetch(`${AI_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}`, 'HTTP-Referer': 'https://mockmate-mu-one.vercel.app', 'X-Title': 'MockMate' },
+          body: JSON.stringify({ model: m, messages, temperature, max_tokens: 4096, stream: false }),
+          signal: AbortSignal.timeout(120000)
+        });
+        if (response.ok) {
+          modelUsed = m;
+          break;
+        }
+        const errBody = await response.text();
+        lastError = errBody;
+        console.warn(`[AI Chat] model ${m} failed ${response.status}, trying next...`);
+        if (response.status !== 429 && response.status !== 404 && response.status !== 503) break;
+      } catch (fetchErr) {
+        lastError = fetchErr.message;
+        console.warn(`[AI Chat] model ${m} fetch error, trying next...`);
+      }
     }
+
+    if (!response || !response.ok) {
+      console.error(`[AI Chat] all models failed. Last error: ${lastError?.slice(0, 500)}`);
+      return res.status(503).json({ error: 'AI service temporarily unavailable. Please try again in a moment.' });
+    }
+
     const data = await response.json();
     aiContent = data.choices?.[0]?.message?.content || '';
     res.json({ message: { content: aiContent, role: 'assistant' } });
