@@ -30,7 +30,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { API_BASE } from '../config/api.js';
-import { getTestCasesFor, getReferenceSolution, generateExpectedOutput } from '../data/leetcodeTestcases.js';
+import { getTestCasesFor, getReferenceSolution, generateExpectedOutput, isValidAnswer } from '../data/leetcodeTestcases.js';
 
 // ── Language metadata ────────────────────────────────────────────────────────
 const LANGUAGES = [
@@ -1284,12 +1284,20 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
       if (compileError) {
         setCompileError(compileError); setRunResult([]); setRunning(false); return;
       }
-      setRunResult(raw.map((r, i) => ({
-        ...r,
-        expected: testCases[i]?.expectedOutput ?? '',
-        passed: !r.error && (testCases[i]?.expectedOutput ? normalize(r.actual) === normalize(testCases[i].expectedOutput) : true),
-        noExpected: !testCases[i]?.expectedOutput,
-      })));
+      setRunResult(raw.map((r, i) => {
+        const tc = testCases[i];
+        let passed;
+        if (r.error) passed = false;
+        else if (!tc?.expectedOutput) passed = true;
+        else if (normalize(r.actual) === normalize(tc.expectedOutput)) passed = true;
+        else {
+          // Custom validator for problems with multiple valid answers
+          const slug = question.titleSlug || q.titleSlug;
+          const valid = slug ? isValidAnswer(slug, tc.input, r.actual) : null;
+          passed = valid !== null ? valid : false;
+        }
+        return { ...r, expected: tc?.expectedOutput ?? '', passed, noExpected: !tc?.expectedOutput };
+      }));
       setRunning(false);
     } catch (err) {
       setCompileError(err?.message ?? String(err)); setRunResult([]); setRunning(false);
@@ -1308,12 +1316,19 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
         setFinalResult(failed); setSubmitted(true); setSubmitting(false);
         onSubmit?.(failed); return;
       }
-      const annotated = raw.map((r, i) => ({
-        ...r,
-        expected: testCases[i]?.expectedOutput ?? '',
-        passed: !r.error && (testCases[i]?.expectedOutput ? normalize(r.actual) === normalize(testCases[i].expectedOutput) : true),
-        noExpected: !testCases[i]?.expectedOutput,
-      }));
+      const annotated = raw.map((r, i) => {
+        const tc = testCases[i];
+        let passed;
+        if (r.error) passed = false;
+        else if (!tc?.expectedOutput) passed = true;
+        else if (normalize(r.actual) === normalize(tc.expectedOutput)) passed = true;
+        else {
+          const slug = question.titleSlug || q.titleSlug;
+          const valid = slug ? isValidAnswer(slug, tc.input, r.actual) : null;
+          passed = valid !== null ? valid : false;
+        }
+        return { ...r, expected: tc?.expectedOutput ?? '', passed, noExpected: !tc?.expectedOutput };
+      });
       const passed = annotated.filter(r => r.passed).length;
       const total = annotated.length;
       const hasExpected = annotated.some(r => !r.noExpected);
