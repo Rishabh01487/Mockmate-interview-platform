@@ -1100,13 +1100,14 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
 
         // ── Test cases ──────────────────────────────────────────────────────
         // Priority: curated database > reference solution auto-verify > examples
+        // verificationLevel: 1=curated (exact), 2=reference (exact), 3=example (soft)
         const curatedTestCases = getTestCasesFor(question.titleSlug);
         const refSolution = getReferenceSolution(question.titleSlug);
         let testCases;
 
         if (curatedTestCases && curatedTestCases.length > 0) {
           // Level 1: Curated test cases with hardcoded expected outputs
-          testCases = curatedTestCases;
+          testCases = curatedTestCases.map(tc => ({ ...tc, verificationLevel: 1 }));
         } else {
           // Level 2/3: Use example testcases from the problem description
           const testcaseStr = data.exampleTestcases || '';
@@ -1121,11 +1122,11 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
           for (let i = 0; i < tcLines.length; i += paramCount) {
             const chunk = tcLines.slice(i, i + paramCount);
             if (chunk.length === paramCount) {
-              testCases.push({ input: chunk.join('\n'), expectedOutput: '' });
+              testCases.push({ input: chunk.join('\n'), expectedOutput: '', verificationLevel: 0 });
             }
           }
           if (testCases.length === 0 && tcLines.length > 0) {
-            testCases.push({ input: tcLines.join('\n'), expectedOutput: '' });
+            testCases.push({ input: tcLines.join('\n'), expectedOutput: '', verificationLevel: 0 });
           }
 
           // Level 2: Auto-generate expected outputs using reference solution
@@ -1134,10 +1135,14 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
               const generated = generateExpectedOutput(question.titleSlug, tc.input);
               if (generated !== null) {
                 tc.expectedOutput = generated;
+                tc.verificationLevel = 2;
               }
             }
           } else {
-            // Level 3: Match test cases to examples to fill in expected outputs
+            // Level 3: Match test cases to examples (soft verification)
+            // These outputs come from HTML parsing and may have formatting
+            // differences or multiple valid answers — so we use SOFT matching:
+            // if output matches → Accepted, if not → Executed (NOT Wrong Answer)
             if (examples.length > 0 && testCases.length > 0) {
               for (const tc of testCases) {
                 const tcValues = tc.input.split('\n').map(v => v.trim());
@@ -1150,6 +1155,7 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
                       exValues.every((ev, i) => normalize(ev) === normalize(tcValues[i]));
                     if (matches) {
                       tc.expectedOutput = (ex.output || '').trim();
+                      tc.verificationLevel = 3; // soft — won't show "Wrong Answer"
                       break;
                     }
                   }
@@ -1286,17 +1292,20 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
       }
       setRunResult(raw.map((r, i) => {
         const tc = testCases[i];
-        let passed;
-        if (r.error) passed = false;
-        else if (!tc?.expectedOutput) passed = true;
-        else if (normalize(r.actual) === normalize(tc.expectedOutput)) passed = true;
+        const level = tc?.verificationLevel || 0;
+        let passed, status;
+        if (r.error) { passed = false; status = 'error'; }
+        else if (!tc?.expectedOutput) { passed = true; status = 'executed'; }
+        else if (normalize(r.actual) === normalize(tc.expectedOutput)) { passed = true; status = 'accepted'; }
         else {
-          // Custom validator for problems with multiple valid answers
+          // Try custom validator first
           const slug = question.titleSlug || q.titleSlug;
           const valid = slug ? isValidAnswer(slug, tc.input, r.actual) : null;
-          passed = valid !== null ? valid : false;
+          if (valid === true) { passed = true; status = 'accepted'; }
+          else if (level <= 2) { passed = false; status = 'wrong'; }
+          else { passed = true; status = 'executed'; } // Level 3 = soft, don't fail
         }
-        return { ...r, expected: tc?.expectedOutput ?? '', passed, noExpected: !tc?.expectedOutput };
+        return { ...r, expected: tc?.expectedOutput ?? '', passed, status, noExpected: !tc?.expectedOutput };
       }));
       setRunning(false);
     } catch (err) {
@@ -1318,16 +1327,19 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
       }
       const annotated = raw.map((r, i) => {
         const tc = testCases[i];
-        let passed;
-        if (r.error) passed = false;
-        else if (!tc?.expectedOutput) passed = true;
-        else if (normalize(r.actual) === normalize(tc.expectedOutput)) passed = true;
+        const level = tc?.verificationLevel || 0;
+        let passed, status;
+        if (r.error) { passed = false; status = 'error'; }
+        else if (!tc?.expectedOutput) { passed = true; status = 'executed'; }
+        else if (normalize(r.actual) === normalize(tc.expectedOutput)) { passed = true; status = 'accepted'; }
         else {
           const slug = question.titleSlug || q.titleSlug;
           const valid = slug ? isValidAnswer(slug, tc.input, r.actual) : null;
-          passed = valid !== null ? valid : false;
+          if (valid === true) { passed = true; status = 'accepted'; }
+          else if (level <= 2) { passed = false; status = 'wrong'; }
+          else { passed = true; status = 'executed'; }
         }
-        return { ...r, expected: tc?.expectedOutput ?? '', passed, noExpected: !tc?.expectedOutput };
+        return { ...r, expected: tc?.expectedOutput ?? '', passed, status, noExpected: !tc?.expectedOutput };
       });
       const passed = annotated.filter(r => r.passed).length;
       const total = annotated.length;
@@ -1547,16 +1559,18 @@ const ResultsPanel = ({ running, submitting, results, compileError, testCases, s
 };
 
 const TestCaseResultRow = ({ idx, result, expected }) => {
-  const isExecuted = result.noExpected && !result.error;
-  const statusColor = result.passed && !result.noExpected ? LC.accepted : result.error ? LC.wrong : isExecuted ? LC.textDim : LC.wrong;
-  const statusBg = result.passed && !result.noExpected ? `${LC.accepted}11` : result.error ? `${LC.wrong}11` : isExecuted ? `${LC.textDim}11` : `${LC.wrong}11`;
-  const statusBorder = result.passed && !result.noExpected ? `${LC.accepted}55` : result.error ? `${LC.wrong}55` : isExecuted ? `${LC.textDim}55` : `${LC.wrong}55`;
-  const statusLabel = result.error ? 'Runtime Error' : isExecuted ? 'Executed' : result.passed ? 'Accepted' : 'Wrong Answer';
-  const dotColor = result.passed && !result.noExpected ? LC.accepted : result.error ? LC.wrong : isExecuted ? LC.textDim : LC.wrong;
+  // Use the status field directly (set by the comparison logic)
+  // status: 'accepted' | 'wrong' | 'executed' | 'error'
+  const st = result.status || (result.error ? 'error' : result.passed ? 'accepted' : 'executed');
+  const statusColor = st === 'accepted' ? LC.accepted : st === 'error' ? LC.wrong : st === 'executed' ? LC.textDim : LC.wrong;
+  const statusBg = st === 'accepted' ? `${LC.accepted}11` : st === 'error' ? `${LC.wrong}11` : st === 'executed' ? `${LC.textDim}11` : `${LC.wrong}11`;
+  const statusBorder = st === 'accepted' ? `${LC.accepted}55` : st === 'error' ? `${LC.wrong}55` : st === 'executed' ? `${LC.textDim}55` : `${LC.wrong}55`;
+  const statusLabel = st === 'error' ? 'Runtime Error' : st === 'executed' ? 'Executed' : st === 'accepted' ? 'Accepted' : 'Wrong Answer';
+  const dotColor = statusColor;
   return (
   <div style={{ background: LC.panelAlt, border: `1px solid ${statusBorder}`, borderRadius: 6, overflow: 'hidden' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: statusBg, borderBottom: `1px solid ${LC.border}` }}>
-      {result.error ? <FailDot /> : isExecuted ? <ExecDot color={dotColor} /> : result.passed ? <PassDot /> : <FailDot />}
+      {st === 'error' ? <FailDot /> : st === 'executed' ? <ExecDot color={dotColor} /> : st === 'accepted' ? <PassDot /> : <FailDot />}
       <span style={{ fontSize: 13, fontWeight: 600, color: statusColor }}>Case {idx + 1} {statusLabel}</span>
       <span style={{ fontSize: 11, color: LC.textMute, marginLeft: 'auto' }}>{result.elapsedMs.toFixed(1)}ms</span>
     </div>
