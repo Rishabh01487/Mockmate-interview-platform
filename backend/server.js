@@ -882,7 +882,7 @@ app.post('/api/ai/chat', async (req, res) => {
         response = await fetch(`${AI_BASE_URL}/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AI_KEY}`, 'HTTP-Referer': 'https://mockmate-mu-one.vercel.app', 'X-Title': 'MockMate' },
-          body: JSON.stringify({ model: m, messages, temperature, max_tokens: 4096, stream: false }),
+          body: JSON.stringify({ model: m, messages, temperature, max_tokens: 16000, stream: false }),
           signal: AbortSignal.timeout(120000)
         });
         if (response.ok) {
