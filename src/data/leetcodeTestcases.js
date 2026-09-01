@@ -22,7 +22,7 @@ export const LEETCODE_TESTCASES = {
       { input: '[2,7,11,15]\n9', expectedOutput: '[0,1]' },
       { input: '[3,2,4]\n6', expectedOutput: '[1,2]' },
       { input: '[3,3]\n6', expectedOutput: '[0,1]' },
-      { input: '[1,5,8,12,13]\n13', expectedOutput: '[0,2]' },
+      { input: '[1,5,8,12,13]\n13', expectedOutput: '[0,2]', acceptAnyValid: true, problemType: 'two-sum' },
       { input: '[0,4,3,0]\n0', expectedOutput: '[0,3]' },
       { input: '[-3,4,3,90]\n0', expectedOutput: '[0,2]' },
     ],
@@ -849,5 +849,70 @@ export function generateExpectedOutput(titleSlug, input) {
     console.warn('[Reference solution] Error:', err.message);
     return null;
   }
+}
+
+/**
+ * Custom validators for problems with multiple valid outputs.
+ * Returns true if the user's output is a valid answer for the given input,
+ * even if it differs from the reference solution's output.
+ *
+ * Example: Two Sum — any [i,j] where nums[i]+nums[j]==target is valid,
+ * not just the specific pair the reference solution returns.
+ */
+export function isValidAnswer(titleSlug, input, actualOutput) {
+  const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // ── Two Sum: accept any valid pair ──
+  if (titleSlug === 'two-sum' || titleSlug === 'two-sum-ii-input-array-is-sorted') {
+    try {
+      const nums = JSON.parse(lines[0]);
+      const target = parseInt(lines[1], 10);
+      const pair = JSON.parse(actualOutput);
+      if (!Array.isArray(pair) || pair.length !== 2) return false;
+      const [i, j] = pair;
+      if (i < 0 || j < 0 || i >= nums.length || j >= nums.length || i === j) return false;
+      return nums[i] + nums[j] === target;
+    } catch { return false; }
+  }
+
+  // ── 3Sum: accept any valid set of triplets ──
+  if (titleSlug === '3sum') {
+    try {
+      const nums = JSON.parse(lines[0]);
+      const triplets = JSON.parse(actualOutput);
+      if (!Array.isArray(triplets)) return false;
+      for (const t of triplets) {
+        if (!Array.isArray(t) || t.length !== 3) return false;
+        const [a, b, c] = t;
+        if (a < 0 || b < 0 || c < 0 || a >= nums.length || b >= nums.length || c >= nums.length) return false;
+        if (nums[a] + nums[b] + nums[c] !== 0) return false;
+      }
+      return true;
+    } catch { return false; }
+  }
+
+  // ── Group Anagrams: accept any valid grouping ──
+  if (titleSlug === 'group-anagrams') {
+    try {
+      const strs = JSON.parse(lines[0]);
+      const groups = JSON.parse(actualOutput);
+      if (!Array.isArray(groups)) return false;
+      // Check every string is in exactly one group, and each group has anagrams
+      const seen = new Set();
+      for (const group of groups) {
+        if (!Array.isArray(group) || group.length === 0) return false;
+        const sorted = group[0].split('').sort().join('');
+        for (const s of group) {
+          if (seen.has(s)) return false;
+          seen.add(s);
+          if (s.split('').sort().join('') !== sorted) return false;
+        }
+      }
+      return seen.size === strs.length;
+    } catch { return false; }
+  }
+
+  // ── Default: exact match ──
+  return null; // null means "no custom validator, use exact match"
 }
 
