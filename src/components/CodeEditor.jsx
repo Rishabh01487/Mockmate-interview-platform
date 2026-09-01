@@ -1170,10 +1170,22 @@ const LeetCodeCodeEditor = ({ question, onSubmit, readOnly }) => {
             starterCode,
             needsContentFetch: false,
           });
-          // Update the code in the editor for the current language
-          if (starterCode[language]) {
-            setCodeByLang(prev => ({ ...prev, [language]: starterCode[language] }));
-          }
+          // Update the code for ALL languages — the user may switch
+          // languages after the fetch completes, so we need to populate
+          // every language, not just the current one.
+          setCodeByLang(prev => {
+            const updated = { ...prev };
+            for (const lang of Object.keys(starterCode)) {
+              // Only overwrite if the user hasn't already typed something
+              // (i.e. the current code is still the default or empty)
+              if (!updated[lang] || updated[lang].trim() === '' ||
+                  updated[lang].includes('function') && updated[lang].includes('    \n') ||
+                  updated[lang].includes('class Solution') && updated[lang].includes('        \n')) {
+                updated[lang] = starterCode[lang];
+              }
+            }
+            return updated;
+          });
           setContentLoading(false);
         }
       } catch (err) {
