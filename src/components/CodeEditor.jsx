@@ -827,63 +827,112 @@ function javaFallback() {
 }
 
 // ── Default starter code generator ───────────────────────────────────────────
-// Generate LeetCode-accurate starter code based on question tags + title.
-// Falls back to a generic signature when we can't infer the type.
+// Generates LeetCode-accurate starter code based on question tags + title.
+// Handles common LeetCode naming patterns:
+//   - Boolean problems get "is" prefix (Same Tree → isSameTree)
+//   - Tree problems with two trees (Same Tree → TreeNode* p, TreeNode* q)
+//   - Linked list, string, math, design patterns
 function defaultStarter(lang, questionName, question) {
-  const camel = toCamel(questionName);
-  const snake = toSnake(questionName);
+  const lowerTitle = (questionName || '').toLowerCase();
   const tags = (question?.tags || []).join(' ').toLowerCase();
   const isLinkedList = tags.includes('linked-list');
-  const isTree = tags.includes('trees') || tags.includes('tree');
+  const isTree = tags.includes('trees') || tags.includes('tree') || lowerTitle.includes('tree');
   const isDesign = tags.includes('design');
-  const isString = tags.includes('string') && !tags.includes('arrays');
-  const isNumOnly = tags.includes('math') || tags.includes('dynamic-programming');
+  const isString = (tags.includes('string') && !tags.includes('arrays')) || lowerTitle.includes('string') || lowerTitle.includes('palindrome') || lowerTitle.includes('anagram');
+  const isMath = tags.includes('math') || lowerTitle.includes('number') || lowerTitle.includes('integer') || lowerTitle.includes('roman');
 
-  // Determine signature based on problem type
+  // LeetCode boolean naming: isXxx for problems that return bool
+  const booleanKeywords = ['same', 'valid', 'symmetric', 'balanced', 'palindrome', 'subtree',
+    'identical', 'happy', 'ugly', 'power', 'perfect', 'buddy', 'winner', 'monotonic'];
+  const isBoolean = booleanKeywords.some(k => lowerTitle.includes(k));
+
+  // LeetCode "is" prefix for boolean problems
+  let fnName = toCamel(questionName);
+  if (isBoolean && !fnName.startsWith('is')) {
+    fnName = 'is' + fnName.charAt(0).toUpperCase() + fnName.slice(1);
+  }
+
+  // Detect two-tree problems (Same Tree, Symmetric Tree, etc.)
+  const twoTreeProblems = ['same tree', 'symmetric tree', 'identical', 'subtree of another', 'flip equivalent', 'leaf similar'];
+  const isTwoTree = isTree && twoTreeProblems.some(p => lowerTitle.includes(p));
+
+  // Detect tree problems that return bool (not modifying the tree)
+  const treeBoolProblems = ['same tree', 'symmetric', 'balanced', 'subtree', 'path sum', 'identical',
+    'is same', 'is symmetric', 'is balanced', 'univalue', 'cousins', 'cousin'];
+  const isTreeBool = isTree && treeBoolProblems.some(p => lowerTitle.includes(p));
+
   let sig;
   if (isDesign) {
-    // Design problem (e.g. LRU Cache) — class with multiple methods
+    const pascal = toPascal(questionName);
     sig = {
-      js: `var ${toPascal(questionName)} = function() {\n    \n};`,
-      py: `class ${toPascal(questionName)}:\n    def __init__(self):\n        pass`,
-      java: `class ${toPascal(questionName)} {\n    public ${toPascal(questionName)}() {\n        \n    }\n}`,
-      cpp: `class ${toPascal(questionName)} {\npublic:\n    ${toPascal(questionName)}() {\n        \n    }\n};`,
-    };
-  } else if (isLinkedList) {
-    sig = {
-      js: `/**\n * @param {ListNode} head\n * @return {ListNode}\n */\nvar ${camel} = function(head) {\n    \n};`,
-      py: `class Solution:\n    def ${camel}(self, head: Optional[ListNode]) -> Optional[ListNode]:\n        pass`,
-      java: `class Solution {\n    public ListNode ${camel}(ListNode head) {\n        \n    }\n}`,
-      cpp: `class Solution {\npublic:\n    ListNode* ${camel}(ListNode* head) {\n        \n    }\n};`,
+      js: `var ${pascal} = function() {\n    \n};`,
+      py: `class ${pascal}:\n    def __init__(self):\n        pass`,
+      java: `class ${pascal} {\n    public ${pascal}() {\n        \n    }\n}`,
+      cpp: `class ${pascal} {\npublic:\n    ${pascal}() {\n        \n    }\n};`,
     };
   } else if (isTree) {
+    if (isTwoTree) {
+      // Two tree params: Same Tree, Symmetric Tree, etc.
+      sig = {
+        js: `/**\n * @param {TreeNode} p\n * @param {TreeNode} q\n * @return {boolean}\n */\nvar ${fnName} = function(p, q) {\n    \n};`,
+        py: `class Solution:\n    def ${fnName}(self, p: Optional[TreeNode], q: Optional[TreeNode]) -> bool:\n        pass`,
+        java: `class Solution {\n    public boolean ${fnName}(TreeNode p, TreeNode q) {\n        \n    }\n}`,
+        cpp: `class Solution {\npublic:\n    bool ${fnName}(TreeNode* p, TreeNode* q) {\n        \n    }\n};`,
+      };
+    } else if (isTreeBool) {
+      // Single tree param, returns bool: Balanced, Path Sum, etc.
+      sig = {
+        js: `/**\n * @param {TreeNode} root\n * @return {boolean}\n */\nvar ${fnName} = function(root) {\n    \n};`,
+        py: `class Solution:\n    def ${fnName}(self, root: Optional[TreeNode]) -> bool:\n        pass`,
+        java: `class Solution {\n    public boolean ${fnName}(TreeNode root) {\n        \n    }\n}`,
+        cpp: `class Solution {\npublic:\n    bool ${fnName}(TreeNode* root) {\n        \n    }\n};`,
+      };
+    } else {
+      // Single tree param, returns TreeNode*: Invert, Merge, etc.
+      sig = {
+        js: `/**\n * @param {TreeNode} root\n * @return {TreeNode}\n */\nvar ${fnName} = function(root) {\n    \n};`,
+        py: `class Solution:\n    def ${fnName}(self, root: Optional[TreeNode]) -> Optional[TreeNode]:\n        pass`,
+        java: `class Solution {\n    public TreeNode ${fnName}(TreeNode root) {\n        \n    }\n}`,
+        cpp: `class Solution {\npublic:\n    TreeNode* ${fnName}(TreeNode* root) {\n        \n    }\n};`,
+      };
+    }
+  } else if (isLinkedList) {
     sig = {
-      js: `/**\n * @param {TreeNode} root\n * @return {TreeNode}\n */\nvar ${camel} = function(root) {\n    \n};`,
-      py: `class Solution:\n    def ${camel}(self, root: Optional[TreeNode]) -> Optional[TreeNode]:\n        pass`,
-      java: `class Solution {\n    public TreeNode ${camel}(TreeNode root) {\n        \n    }\n}`,
-      cpp: `class Solution {\npublic:\n    TreeNode* ${camel}(TreeNode* root) {\n        \n    }\n};`,
+      js: `/**\n * @param {ListNode} head\n * @return {ListNode}\n */\nvar ${fnName} = function(head) {\n    \n};`,
+      py: `class Solution:\n    def ${fnName}(self, head: Optional[ListNode]) -> Optional[ListNode]:\n        pass`,
+      java: `class Solution {\n    public ListNode ${fnName}(ListNode head) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    ListNode* ${fnName}(ListNode* head) {\n        \n    }\n};`,
     };
   } else if (isString) {
+    if (isBoolean) {
+      sig = {
+        js: `/**\n * @param {string} s\n * @return {boolean}\n */\nvar ${fnName} = function(s) {\n    \n};`,
+        py: `class Solution:\n    def ${fnName}(self, s: str) -> bool:\n        pass`,
+        java: `class Solution {\n    public boolean ${fnName}(String s) {\n        \n    }\n}`,
+        cpp: `class Solution {\npublic:\n    bool ${fnName}(string s) {\n        \n    }\n};`,
+      };
+    } else {
+      sig = {
+        js: `/**\n * @param {string} s\n * @return {number}\n */\nvar ${fnName} = function(s) {\n    \n};`,
+        py: `class Solution:\n    def ${fnName}(self, s: str) -> int:\n        pass`,
+        java: `class Solution {\n    public int ${fnName}(String s) {\n        \n    }\n}`,
+        cpp: `class Solution {\npublic:\n    int ${fnName}(string s) {\n        \n    }\n};`,
+      };
+    }
+  } else if (isMath) {
     sig = {
-      js: `/**\n * @param {string} s\n * @return {boolean}\n */\nvar ${camel} = function(s) {\n    \n};`,
-      py: `class Solution:\n    def ${camel}(self, s: str) -> bool:\n        pass`,
-      java: `class Solution {\n    public boolean ${camel}(String s) {\n        \n    }\n}`,
-      cpp: `class Solution {\npublic:\n    bool ${camel}(string s) {\n        \n    }\n};`,
-    };
-  } else if (isNumOnly) {
-    sig = {
-      js: `/**\n * @param {number} n\n * @return {number}\n */\nvar ${camel} = function(n) {\n    \n};`,
-      py: `class Solution:\n    def ${camel}(self, n: int) -> int:\n        pass`,
-      java: `class Solution {\n    public int ${camel}(int n) {\n        \n    }\n}`,
-      cpp: `class Solution {\npublic:\n    int ${camel}(int n) {\n        \n    }\n};`,
+      js: `/**\n * @param {number} x\n * @return {number}\n */\nvar ${fnName} = function(x) {\n    \n};`,
+      py: `class Solution:\n    def ${fnName}(self, x: int) -> int:\n        pass`,
+      java: `class Solution {\n    public int ${fnName}(int x) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    int ${fnName}(int x) {\n        \n    }\n};`,
     };
   } else {
     // Default: array + int → array (Two Sum pattern)
     sig = {
-      js: `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar ${camel} = function(nums, target) {\n    \n};`,
-      py: `class Solution:\n    def ${camel}(self, nums: List[int], target: int) -> List[int]:\n        pass`,
-      java: `class Solution {\n    public int[] ${camel}(int[] nums, int target) {\n        \n    }\n}`,
-      cpp: `class Solution {\npublic:\n    vector<int> ${camel}(vector<int>& nums, int target) {\n        \n    }\n};`,
+      js: `/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nvar ${fnName} = function(nums, target) {\n    \n};`,
+      py: `class Solution:\n    def ${fnName}(self, nums: List[int], target: int) -> List[int]:\n        pass`,
+      java: `class Solution {\n    public int[] ${fnName}(int[] nums, int target) {\n        \n    }\n}`,
+      cpp: `class Solution {\npublic:\n    vector<int> ${fnName}(vector<int>& nums, int target) {\n        \n    }\n};`,
     };
   }
   return sig[lang] || sig.js;
