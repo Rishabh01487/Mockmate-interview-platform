@@ -6,6 +6,7 @@ import InterviewPage from './InterviewPage.jsx';
 import InterviewRoom from './InterviewRoom.jsx';
 import AnalyticsReport from './AnalyticsReport.jsx';
 import ChatBot from './ChatBot.jsx';
+import AudienceScene from './components/audience/AudienceScene.jsx';
 import './App.css';
 
 /**
@@ -77,7 +78,12 @@ function AppShell() {
 
   return (
     <>
-      {renderView()}
+      {/* 3D Character Audience — fixed background */}
+      <AudienceScene fixed={true} showLaptop={true} count={14} />
+      {/* Main app content — above the animation */}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        {renderView()}
+      </div>
       <ChatBot />
     </>
   );
